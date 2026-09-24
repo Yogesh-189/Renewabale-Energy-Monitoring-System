@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solar Monitoring Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1720;
+    --card: #16212c;
+    --border: #263340;
+    --text: #e7edf3;
+    --muted: #8fa1b3;
+    --accent: #ffb020;
+    --good: #33cc7a;
+    --bad: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h2 { font-size: 13px; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat { font-size: 26px; font-weight: 600; }
+  .stat small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  .badge-ok { color: var(--good); }
+  .badge-bad { color: var(--bad); }
+  .chart-card { grid-column: 1 / -1; }
+  #status { font-size: 13px; margin-bottom: 12px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  select, button {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<h1>☀️ Solar Monitoring &amp; Optimization Dashboard</h1>
+<div class="subtitle">Reads live from your local API at <code id="apiBaseLabel">http://localhost:8000</code></div>
+<div id="dataAsOf" class="subtitle" style="margin-top:-14px"></div>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+  <div id="status"><span class="dot" style="background:var(--muted)"></span>Connecting to API…</div>
+  <div id="liveClock" style="font-size:13px;color:var(--muted)"></div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Active Inverters</h2>
+    <div class="stat" id="statInverters">–</div>
+  </div>
+  <div class="card">
+    <h2>Total Daily Yield</h2>
+    <div class="stat" id="statYield">– <small>kWh</small></div>
+  </div>
+  <div class="card">
+    <h2>Avg Conversion Efficiency</h2>
+    <div class="stat" id="statEfficiency">– <small>%</small></div>
+  </div>
+  <div class="card">
+    <h2>Active Fault Alerts</h2>
+    <div class="stat" id="statAlerts">–</div>
+  </div>
+  <div class="card">
+    <h2>Solar Irradiation</h2>
+    <div class="stat" id="statIrradiation">– <small>kW/m²</small></div>
+  </div>
+  <div class="card">
+    <h2>Ambient Temperature</h2>
+    <div class="stat" id="statTemp">– <small>°C</small></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card chart-card">
+    <h2>Forecast — Next 6 Daylight Hours (avg across inverters)</h2>
+    <canvas id="forecastChart" height="90"></canvas>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Performance by Inverter</h2>
+    <table id="perfTable">
+      <thead><tr><th>Inverter</th><th>Daily Yield (kWh)</th><th>Total Yield</th><th>Efficiency</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Fault Alerts</h2>
+    <table id="alertTable">
+      <thead><tr><th>Time</th><th>Inverter</th><th>Actual</th><th>Expected</th><th>Ratio</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card chart-card">
+    <h2>Optimization — Recommended Load &amp; Battery Schedule (next 24h)</h2>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px" id="optimizeSummary"></div>
+    <table id="optimizeTable">
+      <thead><tr><th>Load</th><th>Recommended window</th><th>Load (kW)</th><th>Solar available (kW)</th><th>Solar coverage</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:8000";
+
+async function fetchJSON(path) {
+  const res = await fetch(API_BASE + path);
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return res.json();
+}
+
+function setStatus(ok, msg) {
+  const el = document.getElementById("status");
+  el.innerHTML = `<span class="dot" style="background:${ok ? "var(--good)" : "var(--bad)"}"></span>${msg}`;
+}
+
+let chart;
+let nameMap = {}; // SOURCE_KEY -> "Inverter 1", "Inverter 2", ...
+
+function friendlyName(sourceKey) {
+  if (!nameMap[sourceKey]) {
+    const n = Object.keys(nameMap).length + 1;
+    nameMap[sourceKey] = `Inverter ${n}`;
+  }
+  return nameMap[sourceKey];
+}
+
+function tickClock() {
+  const now = new Date();
+  document.getElementById("liveClock").textContent =
+    "Your local time: " + now.toLocaleString();
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+async function loadWeather() {
+  try {
+    const w = await fetchJSON("/weather/latest");
+    document.getElementById("statIrradiation").innerHTML = `${w.IRRADIATION} <small>kW/m²</small>`;
+    document.getElementById("statTemp").innerHTML = `${w.AMBIENT_TEMPERATURE} <small>°C</small>`;
+    document.getElementById("dataAsOf").textContent =
+      `Dataset's most recent reading: ${w.DATE_TIME} (this is historical demo data, not today's date — see note below)`;
+  } catch (e) { console.error(e); }
+}
+
+async function loadDashboard() {
+  try {
+    await fetchJSON("/health");
+    setStatus(true, "Connected to API");
+  } catch (e) {
+    setStatus(false, "Cannot reach API — make sure `uvicorn api:app --reload --port 8000` is running in the src folder");
+    return;
+  }
+
+  await loadWeather();
+
+  // Performance summary
+  try {
+    const perf = await fetchJSON("/performance/summary");
+
+    // Build a stable, sorted name map the FIRST time only, so "Inverter 1"
+    // always refers to the same physical inverter on every refresh
+    if (Object.keys(nameMap).length === 0) {
+      [...perf].sort((a, b) => a.SOURCE_KEY.localeCompare(b.SOURCE_KEY))
+        .forEach(r => friendlyName(r.SOURCE_KEY));
+    }
+
+    document.getElementById("statInverters").textContent = perf.length;
+    const totalYield = perf.reduce((s, r) => s + (r.DAILY_YIELD || 0), 0);
+    document.getElementById("statYield").innerHTML = `${totalYield.toFixed(0)} <small>kWh</small>`;
+    const avgEff = perf.reduce((s, r) => s + (r.AVG_CONVERSION_EFFICIENCY || 0), 0) / perf.length;
+    document.getElementById("statEfficiency").innerHTML = `${(avgEff * 100).toFixed(1)} <small>%</small>`;
+
+    const sortedPerf = [...perf].sort((a, b) => {
+      const na = parseInt(friendlyName(a.SOURCE_KEY).replace("Inverter ", ""));
+      const nb = parseInt(friendlyName(b.SOURCE_KEY).replace("Inverter ", ""));
+      return na - nb;
+    });
+
+    const tbody = document.querySelector("#perfTable tbody");
+    tbody.innerHTML = "";
+    sortedPerf.forEach(r => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${friendlyName(r.SOURCE_KEY)} <span style="color:var(--muted);font-size:11px">(${r.SOURCE_KEY})</span></td><td>${r.DAILY_YIELD.toFixed(1)}</td><td>${r.TOTAL_YIELD.toFixed(0)}</td><td>${(r.AVG_CONVERSION_EFFICIENCY*100).toFixed(1)}%</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { console.error(e); }
+
+  // Anomalies
+  try {
+    const alerts = await fetchJSON("/anomalies");
+    document.getElementById("statAlerts").innerHTML = `<span class="${alerts.length ? "badge-bad" : "badge-ok"}">${alerts.length}</span>`;
+    const tbody = document.querySelector("#alertTable tbody");
+    tbody.innerHTML = "";
+    if (alerts.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="color:var(--muted)">No active faults</td></tr>`;
+    }
+    alerts.slice(0, 15).forEach(a => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${a.DATE_TIME}</td><td>${friendlyName(a.SOURCE_KEY)}</td><td>${a.AC_POWER.toFixed(0)}</td><td>${a.PREDICTED_AC_POWER.toFixed(0)}</td><td class="badge-bad">${(a.PERFORMANCE_RATIO*100).toFixed(0)}%</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { console.error(e); }
+
+  // Forecast chart
+  try {
+    const result = await fetchJSON("/forecast?hours=6");
+    const forecast = result.data;
+    const byTime = {};
+    forecast.forEach(f => {
+      byTime[f.DATE_TIME] = (byTime[f.DATE_TIME] || 0) + f.PREDICTED_AC_POWER;
+    });
+    const labels = Object.keys(byTime).sort();
+    const values = labels.map(l => byTime[l]);
+
+    const ctx = document.getElementById("forecastChart").getContext("2d");
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels.map(l => l.split(" ")[1]),
+        datasets: [{
+          label: "Predicted Total AC Power (kW)",
+          data: values,
+          borderColor: "#ffb020",
+          backgroundColor: "rgba(255,176,32,0.15)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: "#8fa1b3" } } },
+        scales: {
+          x: { ticks: { color: "#8fa1b3", maxTicksLimit: 10 }, grid: { color: "#263340" } },
+          y: { ticks: { color: "#8fa1b3" }, grid: { color: "#263340" } }
+        }
+      }
+    });
+  } catch (e) { console.error(e); }
+
+  // Optimization schedule
+  try {
+    const plan = await fetchJSON("/optimize/schedule");
+    document.getElementById("optimizeSummary").textContent =
+      `Predicted generation, next 24h: ${plan.total_predicted_generation_kwh_next_24h} kWh. ` +
+      `Battery charge window: ${plan.battery_charge_plan.recommended_start} → ${plan.battery_charge_plan.recommended_end}.`;
+
+    const tbody = document.querySelector("#optimizeTable tbody");
+    tbody.innerHTML = "";
+    plan.flexible_load_schedule.forEach(item => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.load}</td><td>${item.recommended_start} → ${item.recommended_end}</td><td>${item.load_power_kw}</td><td>${item.avg_predicted_solar_available_kw}</td><td class="${item.estimated_solar_coverage_pct >= 80 ? 'badge-ok' : ''}">${item.estimated_solar_coverage_pct}%</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { console.error(e); }
+}
+
+loadDashboard();
+setInterval(loadDashboard, 30000); // refresh every 30s
+</script>
+
+</body>
+</html>
