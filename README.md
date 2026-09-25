@@ -5,7 +5,6 @@ An AI-powered, cloud-ready system for monitoring solar plant performance, foreca
 ![Status](https://img.shields.io/badge/status-active%20development-yellow)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
-![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ---
 
