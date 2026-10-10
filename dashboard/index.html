@@ -1311,7 +1311,7 @@
       <div class="section-header">
         <h2>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-emerald)"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          Real-Time Sensor Bus (Simulated IoT Feed) <span class="src-tag sim static">Simulated</span>
+          Real-Time Sensor Bus (Simulated IoT Feed)
         </h2>
         <span class="inv-badge online" style="font-size:10px;">Push: 5.0s</span>
       </div>
@@ -2006,7 +2006,9 @@
         const ratio = Math.round(inc.MEAN_RATIO * 100);
         const action = outage
           ? "Zero output during daylight — check inverter trip / AC breaker / comms. (A data-logging gap can look identical.)"
-          : `Output at ${ratio}% of forecast — check soiling, shading and string fuses.`;
+          : ratio < 40
+            ? `Output at ${ratio}% of forecast — most of the output is missing. Check string fuses, DC isolators and inverter derating; soiling or shading rarely cause a loss this large.`
+            : `Output at ${ratio}% of forecast — check soiling, shading and string fuses.`;
         item.innerHTML = `
           <div>
             <div class="title">
@@ -2271,7 +2273,7 @@
         }
         if (forecastChartData) renderPrimaryChart(forecastChartData);
       } else if (tab === 'liveStream') {
-        subtitle.textContent = "Simulated IoT sensor feed using this computer's real clock — new readings every few seconds";
+        subtitle.textContent = "Simulated IoT sensor feed running on the plant's local clock (IST) — new readings every few seconds";
         pill.textContent = "Feed Active • 100% Signal";
         if (liveChartData) {
           renderPrimaryChart(liveChartData);

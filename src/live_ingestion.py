@@ -33,7 +33,7 @@ import os
 import threading
 import time
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from collections import deque
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -48,6 +48,17 @@ CSV_FIELDS = [
     "DATE_TIME", "SOURCE_KEY", "DC_POWER", "AC_POWER",
     "AMBIENT_TEMPERATURE", "MODULE_TEMPERATURE", "IRRADIATION",
 ]
+
+
+# The simulated plant keeps its OWN local time. A cloud server runs on UTC, so
+# using the server's clock made the feed show 'night' at 9 am in India.
+# Default is India Standard Time (UTC+5:30); override with PLANT_UTC_OFFSET_MINUTES.
+PLANT_TZ = timezone(timedelta(minutes=int(os.environ.get("PLANT_UTC_OFFSET_MINUTES", "330"))))
+
+
+def _plant_now() -> datetime:
+    """Current time at the simulated plant (timezone-aware)."""
+    return datetime.now(PLANT_TZ)
 
 
 def _irradiance_now(now: datetime) -> float:
@@ -80,7 +91,7 @@ class LiveStore:
 
     def _tick(self):
         import random
-        now = datetime.now()
+        now = _plant_now()
         irr = _irradiance_now(now)
         ambient = 24 + 6 * irr + random.gauss(0, 0.6)
         module = ambient + 18 * irr + random.gauss(0, 1.0)
@@ -123,7 +134,7 @@ class LiveStore:
         if self._running:
             return
         self._running = True
-        self._started_at = datetime.now()
+        self._started_at = _plant_now()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -155,11 +166,11 @@ class LiveStore:
             rows = list(self._rows)
         if not rows:
             return []
-        cutoff = time.time() - minutes * 60
+        cutoff = _plant_now().replace(tzinfo=None) - timedelta(minutes=minutes)
         out = []
         for row in rows:
             ts = datetime.strptime(row["DATE_TIME"], "%Y-%m-%d %H:%M:%S")
-            if ts.timestamp() >= cutoff:
+            if ts >= cutoff:
                 out.append(row)
         return out
 
