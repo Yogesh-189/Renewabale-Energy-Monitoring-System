@@ -1,0 +1,14 @@
+# Render "Blueprint": lets you deploy by clicking New + > Blueprint and pointing at your GitHub repo.
+services:
+  - type: web
+    name: renewable-energy-monitoring
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd src && uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: OPEN_DOCS_ON_START
+        value: "0"
+      - key: PYTHON_VERSION
+        value: "3.12.3"

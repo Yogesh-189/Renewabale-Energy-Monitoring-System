@@ -1,0 +1,10 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.vscode/
+*.pdf
+data/live_stream.csv
+data/weather_cache.json
+data/processed_dataset.csv

@@ -30,11 +30,14 @@ UNDERPERFORM_THRESHOLD = 0.35
 MIN_CONSECUTIVE = 2
 
 
-def detect_anomalies(df: pd.DataFrame = None) -> pd.DataFrame:
+def detect_anomalies(df: pd.DataFrame = None, model=None) -> pd.DataFrame:
     if df is None:
         df = build_dataset()
 
-    model = joblib.load(MODEL_PATH)
+    # Callers that already hold a loaded model (the API caches one) can pass
+    # it in; loading a ~25 MB joblib file on every call is needlessly slow.
+    if model is None:
+        model = joblib.load(MODEL_PATH)
 
     df = df.dropna(subset=FEATURES).copy()
     df["PREDICTED_AC_POWER"] = model.predict(df[FEATURES])
@@ -65,6 +68,80 @@ def detect_anomalies(df: pd.DataFrame = None) -> pd.DataFrame:
     return daylight, alerts
 
 
+def group_incidents(alerts: pd.DataFrame, dataset_end, recent_hours: int = 24,
+                    interval_minutes: int = 15) -> dict:
+    """
+    Collapses per-reading alerts into INCIDENTS.
+
+    `alerts` has one row per confirmed 15-minute reading, so a single 3-hour
+    outage on one inverter shows up as ~12 "alerts". For an operator (and a
+    reviewer) the meaningful unit is the incident: one inverter, one
+    continuous period of underperformance.
+
+    Two readings belong to the same incident if they are at most two
+    intervals (30 min) apart. An incident's start is backdated by one
+    interval, because a reading only becomes a *confirmed* alert on the
+    2nd consecutive bad reading (MIN_CONSECUTIVE = 2).
+
+    An incident is "recent" if it ended within `recent_hours` of the last
+    timestamp in the dataset - that is what separates a fault that needs
+    attention now from one that is simply part of the history.
+    """
+    dataset_end = pd.Timestamp(dataset_end)
+    empty = {
+        "dataset_end": str(dataset_end), "recent_window_hours": recent_hours,
+        "summary": {"alert_readings": 0, "incidents": 0, "inverters_affected": 0,
+                    "inverters_recent": 0},
+        "incidents": [],
+    }
+    if alerts is None or len(alerts) == 0:
+        return empty
+
+    a = alerts.sort_values(["SOURCE_KEY", "DATE_TIME"]).copy()
+    a["DATE_TIME"] = pd.to_datetime(a["DATE_TIME"])
+    new_incident = (
+        a.groupby("SOURCE_KEY")["DATE_TIME"].diff() > pd.Timedelta(minutes=2 * interval_minutes)
+    ) | a["SOURCE_KEY"].ne(a["SOURCE_KEY"].shift())
+    a["INCIDENT_ID"] = new_incident.cumsum()
+
+    incidents = []
+    for _, g in a.groupby("INCIDENT_ID"):
+        start = g["DATE_TIME"].iloc[0] - pd.Timedelta(minutes=interval_minutes)
+        end = g["DATE_TIME"].iloc[-1]
+        duration = int((end - start).total_seconds() // 60) + interval_minutes
+        mean_ratio = float(g["PERFORMANCE_RATIO"].mean())
+        incidents.append({
+            "SOURCE_KEY": g["SOURCE_KEY"].iloc[0],
+            "START": str(start),
+            "END": str(end),
+            "DURATION_MIN": duration,
+            "CONFIRMED_READINGS": int(len(g)),
+            "MEAN_ACTUAL": round(float(g["AC_POWER"].mean()), 1),
+            "MEAN_EXPECTED": round(float(g["PREDICTED_AC_POWER"].mean()), 1),
+            "MEAN_RATIO": round(float(g["PERFORMANCE_RATIO"].mean()), 3),
+            "MIN_RATIO": round(float(g["PERFORMANCE_RATIO"].min()), 3),
+            # An incident averaging under 10% of forecast is an OUTAGE (the inverter
+            # produced essentially nothing), even if a few edge readings show a
+            # little output. Judging by the maximum reading wrongly downgraded a
+            # 3.5-hour near-zero event to "underperformance - check soiling".
+            "SEVERITY": "TOTAL_OUTAGE" if mean_ratio < 0.10 else "UNDERPERFORMANCE",
+            "IS_RECENT": bool(end >= dataset_end - pd.Timedelta(hours=recent_hours)),
+        })
+    incidents.sort(key=lambda i: i["END"], reverse=True)
+
+    return {
+        "dataset_end": str(dataset_end),
+        "recent_window_hours": recent_hours,
+        "summary": {
+            "alert_readings": int(len(a)),
+            "incidents": len(incidents),
+            "inverters_affected": len({i["SOURCE_KEY"] for i in incidents}),
+            "inverters_recent": len({i["SOURCE_KEY"] for i in incidents if i["IS_RECENT"]}),
+        },
+        "incidents": incidents,
+    }
+
+
 if __name__ == "__main__":
     daylight, alerts = detect_anomalies()
     print(f"Daylight readings evaluated: {len(daylight)}")
@@ -76,3 +153,9 @@ if __name__ == "__main__":
         summary = alerts.groupby("SOURCE_KEY").size().sort_values(ascending=False)
         print("\nAlerts by inverter:")
         print(summary)
+
+        report = group_incidents(alerts, build_dataset()["DATE_TIME"].max())
+        print("\nGrouped into incidents:", report["summary"])
+        for inc in report["incidents"][:8]:
+            print(f"  {inc['SOURCE_KEY']}  {inc['START']} -> {inc['END']}  "
+                  f"{inc['DURATION_MIN']} min  {inc['SEVERITY']}")

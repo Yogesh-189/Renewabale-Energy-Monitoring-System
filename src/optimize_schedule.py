@@ -29,33 +29,48 @@ from train_forecast_model import FEATURES
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "forecast_model.joblib")
 
 
-def get_forecast_curve(df: pd.DataFrame, model, hours_ahead: int = 24) -> pd.DataFrame:
-    """Builds an hour-by-hour predicted TOTAL plant output curve for the
-    next N hours, using historical same-hour averages as the weather
-    stand-in (same approach as the API's /forecast endpoint)."""
+# The flexible loads below (EV charger, pump, washing machine, 50 kWh battery)
+# are sized for a SMALL facility, not for a ~20 MW utility plant. So instead of
+# treating the whole plant's output as "available solar", the plant forecast is
+# scaled to the installed capacity of the on-site array that feeds those loads.
+# Scaling by the plant's own historical peak also makes this independent of the
+# dataset's power unit (kW vs W) - the unit cancels out.
+SITE_INSTALLED_KW = 100.0
+
+
+def get_forecast_curve(df: pd.DataFrame, model, hours_ahead: int = 24,
+                       site_installed_kw: float = SITE_INSTALLED_KW) -> pd.DataFrame:
+    """Predicted solar output (kW) available to the on-site facility for the
+    next N hours at 15-minute resolution.
+
+    Weather for future timestamps is estimated from this plant's historical
+    same-hour averages (the live-weather endpoint offers a real forecast).
+    All timestamps are predicted in ONE batched model call - the previous
+    one-row-at-a-time loop made this endpoint take many seconds.
+    """
     last_ts = df["DATE_TIME"].max()
     hourly_avg = df.groupby("HOUR")[["IRRADIATION", "AMBIENT_TEMPERATURE", "MODULE_TEMPERATURE"]].mean()
     n_inverters = df["SOURCE_KEY"].nunique()
+    plant_peak = df.groupby("DATE_TIME")["AC_POWER"].sum().max()
 
-    future_ts = [last_ts + timedelta(minutes=15 * (i + 1)) for i in range(hours_ahead * 4)]
-    rows = []
-    for ts in future_ts:
-        avg = hourly_avg.loc[ts.hour]
-        feat = pd.DataFrame([{
-            "IRRADIATION": avg["IRRADIATION"],
-            "AMBIENT_TEMPERATURE": avg["AMBIENT_TEMPERATURE"],
-            "MODULE_TEMPERATURE": avg["MODULE_TEMPERATURE"],
-            "HOUR": ts.hour,
-            "MINUTE": ts.minute,
-            "DAY_OF_WEEK": ts.dayofweek,
-            "MONTH": ts.month,
-        }])[FEATURES]
-        pred_per_inverter = model.predict(feat)[0]
-        rows.append({
-            "DATE_TIME": ts,
-            "PREDICTED_TOTAL_AC_POWER_KW": round(float(pred_per_inverter) * n_inverters / 1000, 2),
-        })
-    return pd.DataFrame(rows)
+    future_ts = pd.DatetimeIndex([last_ts + timedelta(minutes=15 * (i + 1)) for i in range(hours_ahead * 4)])
+    weather = hourly_avg.reindex(future_ts.hour).fillna(0.0)
+    feats = pd.DataFrame({
+        "IRRADIATION": weather["IRRADIATION"].values,
+        "AMBIENT_TEMPERATURE": weather["AMBIENT_TEMPERATURE"].values,
+        "MODULE_TEMPERATURE": weather["MODULE_TEMPERATURE"].values,
+        "HOUR": future_ts.hour,
+        "MINUTE": future_ts.minute,
+        "DAY_OF_WEEK": future_ts.dayofweek,
+        "MONTH": future_ts.month,
+    })[FEATURES]
+
+    plant_total = model.predict(feats) * n_inverters          # whole plant, dataset units
+    site_kw = plant_total / plant_peak * site_installed_kw     # scaled to the on-site array
+    return pd.DataFrame({
+        "DATE_TIME": future_ts,
+        "PREDICTED_TOTAL_AC_POWER_KW": np.round(site_kw, 2),
+    })
 
 
 def recommend_schedule(

@@ -2,3 +2,9 @@ venv/
 __pycache__/
 *.pyc
 .env
+data/live_stream.csv
+data/weather_cache.json
+data/processed_dataset.csv
+__pycache__/
+venv/
+.vscode/

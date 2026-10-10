@@ -1,292 +1,2369 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Solar Monitoring Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<style>
-  :root {
-    --bg: #0f1720;
-    --card: #16212c;
-    --border: #263340;
-    --text: #e7edf3;
-    --muted: #8fa1b3;
-    --accent: #ffb020;
-    --good: #33cc7a;
-    --bad: #ff5c5c;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    padding: 24px;
-  }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .subtitle { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px 18px;
-  }
-  .card h2 { font-size: 13px; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
-  .stat { font-size: 26px; font-weight: 600; }
-  .stat small { font-size: 13px; color: var(--muted); font-weight: 400; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 500; }
-  .badge-ok { color: var(--good); }
-  .badge-bad { color: var(--bad); }
-  .chart-card { grid-column: 1 / -1; }
-  #status { font-size: 13px; margin-bottom: 12px; }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
-  select, button {
-    background: var(--card); color: var(--text); border: 1px solid var(--border);
-    border-radius: 6px; padding: 6px 10px; font-size: 13px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Renewable Energy Monitoring and Optimization System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #070b12;
+      --bg-surface: #0e1522;
+      --bg-card: rgba(18, 26, 41, 0.75);
+      --bg-card-hover: rgba(24, 35, 55, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(245, 158, 11, 0.3);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --accent-solar: #f59e0b;
+      --accent-solar-glow: rgba(245, 158, 11, 0.25);
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.2);
+      --accent-cyan: #06b6d4;
+      --accent-cyan-glow: rgba(6, 182, 212, 0.2);
+      --accent-rose: #ef4444;
+      --accent-rose-glow: rgba(239, 68, 68, 0.25);
+      --accent-purple: #8b5cf6;
+
+      --card-radius: 14px;
+      --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.06) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.05) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      line-height: 1.5;
+      padding: 20px 28px 48px;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-surface); }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* Top Navigation / App Header */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding-bottom: 22px;
+      margin-bottom: 22px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px var(--accent-solar-glow);
+    }
+
+    .brand-icon svg {
+      width: 26px;
+      height: 26px;
+      stroke: #fff;
+    }
+
+    .brand-title h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-title .badge-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 20px;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-solar);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .brand-title p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    /* Mode switcher pill */
+    .mode-pill {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      padding: 3px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mode-btn.active {
+      background: #1e293b;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Status indicator */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: var(--accent-emerald);
+      padding: 6px 12px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.25);
+      color: var(--accent-rose);
+    }
+
+    .status-badge.demo {
+      background: rgba(6, 182, 212, 0.1);
+      border-color: rgba(6, 182, 212, 0.3);
+      color: var(--accent-cyan);
+    }
+
+    .pulsing-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .btn {
+      background: var(--bg-surface);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition);
+    }
+
+    .btn:hover {
+      background: #1e293b;
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .btn-solar {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #000;
+      font-weight: 700;
+      border: none;
+    }
+
+    .btn-solar:hover {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      box-shadow: 0 0 15px var(--accent-solar-glow);
+    }
+
+    /* Sub-bar / Metainfo */
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-bottom: 22px;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(14, 21, 34, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+      position: relative;
+      z-index: 30;          /* keeps the location dropdown above the KPI cards below */
+    }
+
+    .meta-bar span strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* Grid Layouts */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--card-radius);
+      padding: 18px;
+      backdrop-filter: blur(12px);
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.14);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-glow-solar::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    }
+
+    .card-glow-emerald::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #10b981, #34d399);
+    }
+
+    .card-glow-cyan::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #06b6d4, #38bdf8);
+    }
+
+    .card-glow-rose::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #ef4444, #f87171);
+    }
+
+    .kpi-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .kpi-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .kpi-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .kpi-icon svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #fff;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kpi-value small {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .kpi-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .kpi-trend {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .kpi-trend.up {
+      color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .kpi-trend.neutral {
+      color: var(--accent-solar);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .kpi-trend.danger {
+      color: var(--accent-rose);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    /* Progress bar helper */
+    .mini-progress-bar {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .mini-progress-fill {
+      height: 100%;
+      border-radius: 10px;
+      transition: width 0.6s ease;
+    }
+
+    /* Main Content Layout */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 1100px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Section Headers */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .section-header h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .section-header h2 svg {
+      width: 18px;
+      height: 18px;
+      color: var(--accent-solar);
+    }
+
+    .chart-container-box {
+      position: relative;
+      height: 290px;
+      width: 100%;
+    }
+
+    /* Chart Pill Switcher */
+    .chart-tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+
+    .chart-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .chart-tab-btn.active {
+      background: #1e293b;
+      color: #fff;
+    }
+
+    /* Fleet Matrix / Inverter Section */
+    .fleet-deck {
+      margin-bottom: 24px;
+    }
+
+    .fleet-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .filter-pills {
+      display: flex;
+      gap: 6px;
+    }
+
+    .filter-pill {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .filter-pill.active {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: var(--accent-solar);
+    }
+
+    .search-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .search-box input {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 12.5px;
+      outline: none;
+      width: 170px;
+    }
+
+    .search-box input::placeholder {
+      color: var(--text-dim);
+    }
+
+    /* Inverter Grid Cards */
+    .inverter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .inverter-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    .inverter-card:hover {
+      border-color: rgba(255, 255, 255, 0.18);
+      background: #151f30;
+      transform: translateY(-2px);
+    }
+
+    .inverter-card.fault {
+      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.04);
+    }
+
+    .inverter-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .inv-name {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .inv-badge {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .inv-badge.online {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .inv-badge.fault {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--accent-rose);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      animation: pulse 1.5s infinite;
+    }
+
+    .inv-badge.history {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--accent-solar);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .inverter-card.history {
+      border-color: rgba(245, 158, 11, 0.28);
+    }
+
+    .inv-chip {
+      display: inline-block;
+      font-size: 10.5px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-top: 6px;
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--accent-solar);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+
+    .alert-item.historical {
+      background: rgba(245, 158, 11, 0.05);
+      border-left-color: var(--accent-solar);
+    }
+
+    .alert-badge-severe.warn {
+      background: rgba(245, 158, 11, 0.18);
+      color: var(--accent-solar);
+    }
+
+    .inv-stats-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .inv-stats-row strong {
+      color: var(--text-main);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Tables */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      text-align: left;
+    }
+
+    thead th {
+      background: rgba(14, 21, 34, 0.9);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+    }
+
+    tbody td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    /* Optimization cards */
+    .opt-card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .opt-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: var(--transition);
+    }
+
+    .opt-card:hover {
+      border-color: rgba(245, 158, 11, 0.3);
+      transform: translateX(3px);
+    }
+
+    .opt-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .opt-icon-wrap {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--accent-solar);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .opt-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .opt-window {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 1px;
+    }
+
+    .opt-stats {
+      text-align: right;
+    }
+
+    .opt-pct {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--accent-emerald);
+    }
+
+    .opt-coverage-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Live Telemetry Ticker */
+    .telemetry-ticker {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      background: #090e17;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+    }
+
+    /* Alert Items */
+    .alert-item {
+      background: rgba(239, 68, 68, 0.08);
+      border-left: 3px solid var(--accent-rose);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+    }
+
+    .alert-item .title {
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .alert-item .subtitle {
+      color: var(--text-muted);
+      font-size: 11.5px;
+      margin-top: 2px;
+    }
+
+    .alert-badge-severe {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-rose);
+      border-radius: 12px;
+      text-transform: uppercase;
+    }
+
+    /* Battery Storage Gauge */
+    .battery-widget {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(16, 185, 129, 0.08));
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      border-radius: 12px;
+      padding: 14px;
+      margin-top: 14px;
+    }
+
+    .battery-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    /* Data-source labels */
+    .src-tag {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 6px;
+      margin-left: 8px;
+      vertical-align: middle;
+      border: 1px solid transparent;
+    }
+    .src-tag.kaggle { color: var(--accent-solar);  background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); }
+    .src-tag.live   { color: var(--accent-emerald); background: rgba(16,185,129,0.10); border-color: rgba(16,185,129,0.35); }
+    .src-tag.sim    { color: var(--accent-cyan);   background: rgba(6,182,212,0.10);  border-color: rgba(6,182,212,0.30); }
+    .src-tag.demo   { color: #c4b5fd;              background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.35); }
+    .src-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 22px;
+      align-items: center;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin: -6px 4px 18px;
+    }
+    .src-legend .src-tag { margin-left: 0; margin-right: 6px; }
+    body.demo-mode .src-legend, body.demo-mode .src-tag.static { display: none; }
+
+    /* Location picker */
+    .loc-wrap { position: relative; display: inline-block; }
+    .loc-btn {
+      background: rgba(6, 182, 212, 0.1);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: inherit;
+    }
+    .loc-btn:hover { background: rgba(6, 182, 212, 0.18); }
+    .loc-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 50;
+      width: 340px;
+      max-width: 90vw;
+      background: #0e1522;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+      color: var(--text-main);
+    }
+    .loc-panel[hidden] { display: none; }
+    .loc-panel label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin: 10px 0 4px;
+    }
+    .loc-panel label:first-child { margin-top: 0; }
+    .loc-panel select, .loc-panel input {
+      background: var(--bg-surface);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 9px;
+      font-size: 12.5px;
+      font-family: inherit;
+      min-width: 0;
+    }
+    .loc-panel select { width: 100%; }
+    .loc-row { display: flex; gap: 6px; }
+    .loc-row input { flex: 1; }
+    .loc-row button {
+      background: var(--accent-cyan);
+      color: #04222a;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .loc-result {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 9px;
+      margin-top: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .loc-result:hover { border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08); }
+    .loc-note { font-size: 11px; color: var(--text-dim); margin-top: 12px; line-height: 1.45; }
+    #locError { font-size: 11.5px; color: #fca5a5; margin-top: 6px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      body { padding: 14px; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      header { flex-direction: column; align-items: flex-start; }
+      .header-actions { width: 100%; justify-content: space-between; }
+    }
+  </style>
 </head>
 <body>
 
-<h1>☀️ Solar Monitoring &amp; Optimization Dashboard</h1>
-<div class="subtitle">Reads live from your local API at <code id="apiBaseLabel">http://localhost:8000</code></div>
-<div id="dataAsOf" class="subtitle" style="margin-top:-14px"></div>
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-  <div id="status"><span class="dot" style="background:var(--muted)"></span>Connecting to API…</div>
-  <div id="liveClock" style="font-size:13px;color:var(--muted)"></div>
-</div>
+  <!-- Top App Navigation -->
+  <header>
+    <div class="brand-section">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/>
+          <path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+      </div>
+      <div class="brand-title">
+        <h1>Renewable Energy Monitoring and Optimization System <span class="badge-tag">Plant #1 • 22 Inverters</span></h1>
+      </div>
+    </div>
 
-<div class="grid">
-  <div class="card">
-    <h2>Active Inverters</h2>
-    <div class="stat" id="statInverters">–</div>
+    <div class="header-actions">
+      <!-- Data source switcher -->
+      <div class="mode-pill" title="Toggle between live API calls and standalone interactive preview">
+        <button id="btnAutoMode" class="mode-btn active" onclick="switchMode('auto')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Auto (API/Demo)
+        </button>
+        <button id="btnDemoMode" class="mode-btn" onclick="switchMode('demo')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Demo Preview
+        </button>
+      </div>
+
+      <!-- Live Connection Pill -->
+      <div id="connBadge" class="status-badge">
+        <div class="pulsing-dot"></div>
+        <span id="connText">Checking API...</span>
+      </div>
+
+      <!-- Refresh Action -->
+      <button class="btn" onclick="refreshDashboard()" title="Force instant data poll">
+        <svg id="refreshIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <!-- Meta Information Bar -->
+  <div class="meta-bar">
+    <div>
+      <span class="loc-wrap">
+        <button class="loc-btn" id="locBtn" onclick="toggleLocPanel(event)" title="Change location">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="locName">Bengaluru, India</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="loc-panel" id="locPanel" hidden onclick="event.stopPropagation()">
+          <label>Quick pick</label>
+          <select id="locPreset" onchange="applyPreset()"></select>
+
+          <label>Search any city</label>
+          <div class="loc-row">
+            <input id="locSearch" type="text" placeholder="e.g. Jodhpur, Dubai, London" onkeydown="if(event.key==='Enter') searchCity()">
+            <button onclick="searchCity()">Search</button>
+          </div>
+          <div id="locResults"></div>
+
+          <label>Or enter coordinates</label>
+          <div class="loc-row">
+            <input id="locLat" type="text" inputmode="decimal" placeholder="Latitude">
+            <input id="locLon" type="text" inputmode="decimal" placeholder="Longitude">
+            <button onclick="applyCustom()">Apply</button>
+          </div>
+          <div id="locError"></div>
+          <div class="loc-note">The selected location drives the <strong>live weather forecast</strong> (Open-Meteo). The monitored plant's historical readings come from the fixed Kaggle dataset and do not change.</div>
+        </div>
+      </span>
+      &nbsp;<span id="locCoords"></span> &nbsp;•&nbsp;
+      <span><strong id="clockDisplay">--</strong></span> &nbsp;•&nbsp; 
+      <span>Endpoint: <strong id="apiEndpointLabel">--</strong></span> &nbsp;•&nbsp;
+      <span id="datasetNote">Dataset Reference: <strong>Solar Power Plant 1 (34-Day High-Res Telemetry)</strong></span>
+    </div>
+    <div>
+      <span>Next automated poll in <strong id="countdownTimer">30s</strong></span>
+    </div>
   </div>
-  <div class="card">
-    <h2>Total Daily Yield</h2>
-    <div class="stat" id="statYield">– <small>kWh</small></div>
+
+  <div class="src-legend">
+    <span><span class="src-tag kaggle">Kaggle</span>recorded plant data, 15 May – 17 Jun 2020: KPI cards, ML forecast, dispatch, fleet, incident log</span>
+    <span><span class="src-tag live">Live</span>real weather forecast from Open-Meteo: Satellite Weather tab</span>
+    <span><span class="src-tag sim">Simulated</span>software-generated sensor feed: IoT Live Feed tab and sensor bus</span>
   </div>
-  <div class="card">
-    <h2>Avg Conversion Efficiency</h2>
-    <div class="stat" id="statEfficiency">– <small>%</small></div>
+
+  <!-- KPI Key Metric Cards -->
+  <div class="kpi-grid">
+    <!-- Total Plant AC Power -->
+    <div class="card card-glow-solar">
+      <div class="kpi-header">
+        <span class="kpi-title">Fleet Power Output</span>
+        <div class="kpi-icon" style="color:var(--accent-solar); background:var(--accent-solar-glow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value" id="kpiAcPower">14,280 <small>kW</small></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up" id="kpiPowerNote">Latest reading</span>
+        <span>DC Input: <span id="kpiDcPower" style="font-weight:600; color:#fff">14,690 kW</span></span>
+      </div>
+      <div class="mini-progress-bar">
+        <div class="mini-progress-fill" id="kpiPowerBar" style="width: 82%; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
+      </div>
+    </div>
+
+    <!-- Daily Generation Yield -->
+    <div class="card card-glow-emerald">
+      <div class="kpi-header">
+        <span class="kpi-title">Daily Energy Yield</span>
+        <div class="kpi-icon" style="color:var(--accent-emerald); background:var(--accent-emerald-glow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value" id="kpiDailyYield">145,210 <small>kWh</small></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up" id="kpiYieldNote">Fleet total</span>
+        <span>Fleet Avg: <strong id="kpiAvgPerInverter" style="color:#fff">6,600 kWh/inv</strong></span>
+      </div>
+      <div class="mini-progress-bar">
+        <div class="mini-progress-fill" style="width: 94%; background: linear-gradient(90deg, #10b981, #34d399);"></div>
+      </div>
+    </div>
+
+    <!-- Inverter In-Service Ratio -->
+    <div class="card card-glow-cyan">
+      <div class="kpi-header">
+        <span class="kpi-title">Inverters Online</span>
+        <div class="kpi-icon" style="color:var(--accent-cyan); background:var(--accent-cyan-glow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value" id="kpiInvertersOnline">21 <small>/ 22</small></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up" id="kpiUptimePct">95.4% Healthy</span>
+        <span id="kpiPastNote">1 String Underperforming</span>
+      </div>
+      <div class="mini-progress-bar">
+        <div class="mini-progress-fill" style="width: 95.4%; background: linear-gradient(90deg, #06b6d4, #38bdf8);"></div>
+      </div>
+    </div>
+
+    <!-- Avg Inverter Efficiency -->
+    <div class="card card-glow-solar">
+      <div class="kpi-header">
+        <span class="kpi-title">Conversion Efficiency</span>
+        <div class="kpi-icon" style="color:var(--accent-solar); background:var(--accent-solar-glow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value" id="kpiEfficiency">97.8 <small>%</small></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up">Optimal</span>
+        <span>DC to AC Inversion</span>
+      </div>
+      <div class="mini-progress-bar">
+        <div class="mini-progress-fill" style="width: 97.8%; background: linear-gradient(90deg, #f59e0b, #eab308);"></div>
+      </div>
+    </div>
+
+    <!-- Solar Irradiation & Weather -->
+    <div class="card card-glow-cyan">
+      <div class="kpi-header">
+        <span class="kpi-title">Solar Irradiation</span>
+        <div class="kpi-icon" style="color:var(--accent-cyan); background:var(--accent-cyan-glow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value" id="kpiIrradiation">0.824 <small>kW/m²</small></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend neutral" id="kpiAmbientTemp">31.4°C Amb</span>
+        <span>Module: <strong id="kpiModuleTemp" style="color:#fff">48.2°C</strong></span>
+      </div>
+      <div class="mini-progress-bar">
+        <div class="mini-progress-fill" style="width: 82%; background: linear-gradient(90deg, #06b6d4, #0ea5e9);"></div>
+      </div>
+    </div>
+
+    <!-- Carbon Offset & Ecological Impact -->
+    <div class="card card-glow-emerald">
+      <div class="kpi-header">
+        <span class="kpi-title">Avoided CO₂ Today</span>
+        <div class="kpi-icon" style="color:var(--accent-emerald); background:var(--accent-emerald-glow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value" id="kpiCarbonOffset">102.5 <small>Tons</small></div>
+      <div class="kpi-footer">
+        <span class="kpi-trend up" id="kpiTrees">≈ -- Trees</span>
+        <span>Clean Grid Feed</span>
+      </div>
+      <div class="mini-progress-bar">
+        <div class="mini-progress-fill" style="width: 78%; background: linear-gradient(90deg, #10b981, #059669);"></div>
+      </div>
+    </div>
   </div>
-  <div class="card">
-    <h2>Active Fault Alerts</h2>
-    <div class="stat" id="statAlerts">–</div>
+
+  <!-- Primary Analytics Deck -->
+  <div class="main-grid">
+    <!-- Left Column: Forecast & Generation Curves -->
+    <div class="card" style="padding: 22px;">
+      <div class="section-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          ML Generation Forecast &amp; Real-time Telemetry <span id="chartSourceTag" class="src-tag kaggle">Kaggle</span>
+        </h2>
+        <div class="chart-tabs">
+          <button class="chart-tab-btn active" data-tab="forecast" onclick="switchChartTab('forecast')">ML Forecast (6h)</button>
+          <button class="chart-tab-btn" data-tab="liveStream" onclick="switchChartTab('liveStream')">IoT Live Feed</button>
+          <button class="chart-tab-btn" data-tab="openMeteo" onclick="switchChartTab('openMeteo')">Satellite Weather</button>
+        </div>
+      </div>
+
+      <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+        <span id="chartSubtitle">Random Forest Regression Model (R² = 0.979) predicting plant aggregate output</span>
+        <span id="chartHighlightPill" style="font-weight:600; color:var(--accent-solar); background:rgba(245,158,11,0.12); padding:2px 8px; border-radius:4px;">Peak Predicted: 15,240 kW</span>
+      </div>
+
+      <div class="chart-container-box">
+        <canvas id="primaryChart"></canvas>
+      </div>
+
+      <!-- Telemetry Ticker footer -->
+      <div class="telemetry-ticker">
+        <span id="tickerStatus">● CONNECTING…</span>
+        <span id="tickerTicks">waiting for live stream…</span>
+        <span id="tickerModel">Model: forecast_model.joblib (Random Forest)</span>
+      </div>
+    </div>
+
+    <!-- Right Column: Smart Load & Battery Dispatch Optimization -->
+    <div class="card" style="padding: 22px;">
+      <div class="section-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Smart Dispatch Schedule <span class="src-tag kaggle static">Kaggle</span>
+        </h2>
+        <span style="font-size:11.5px; color:var(--accent-solar); font-weight:700;">NEXT 24 HOURS</span>
+      </div>
+
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+        Algorithmic load shifting matches flexible demand to peak solar windows to maximize self-consumption. <span id="optSiteNote" style="color:var(--text-dim);"></span>
+      </p>
+
+      <div class="opt-card-list" id="optScheduleList">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Battery Charge Plan Widget (real data from /optimize/schedule) -->
+      <div class="battery-widget">
+        <div class="battery-header">
+          <span>Battery Storage Plan (50 kWh)</span>
+          <span id="battWindowTag" style="color:var(--accent-cyan); font-weight:800;">--</span>
+        </div>
+        <div class="mini-progress-bar" style="height:7px;">
+          <div id="battSolarFill" class="mini-progress-fill" style="width: 0%; background: linear-gradient(90deg, #06b6d4, #10b981);"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:11.5px; color:var(--text-muted);">
+          <span>Charge Window: <strong id="battWindow">--</strong></span>
+          <span>Max Charge Rate: <strong>10.0 kW</strong></span>
+        </div>
+        <div style="margin-top:6px; font-size:11px; color:var(--text-muted);">
+          Bar shows predicted solar available vs. the 10 kW charge rate during the recommended window.
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="card">
-    <h2>Solar Irradiation</h2>
-    <div class="stat" id="statIrradiation">– <small>kW/m²</small></div>
+
+  <!-- Inverter Fleet Health & Diagnostics Deck -->
+  <div class="card fleet-deck" style="padding: 22px;">
+    <div class="fleet-controls">
+      <div class="section-header" style="margin-bottom:0">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Inverter Fleet Health Matrix (22 Units Monitored) <span class="src-tag kaggle static">Kaggle</span>
+        </h2>
+      </div>
+
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <div class="filter-pills">
+          <button class="filter-pill active" id="pillAll" onclick="filterInverters('all', this)">All Units (22)</button>
+          <button class="filter-pill" id="pillHealthy" onclick="filterInverters('healthy', this)">Normal (21)</button>
+          <button class="filter-pill" id="pillFault" onclick="filterInverters('fault', this)">Active Fault (1)</button>
+          <button class="filter-pill" id="pillHistory" onclick="filterInverters('history', this)">Past Incidents (0)</button>
+        </div>
+
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="invSearchInput" placeholder="Filter by Inverter ID..." oninput="handleSearch(this.value)">
+        </div>
+
+        <div class="chart-tabs">
+          <button id="viewGridBtn" class="chart-tab-btn active" onclick="switchInverterView('grid')">Cards</button>
+          <button id="viewTableBtn" class="chart-tab-btn" onclick="switchInverterView('table')">Table</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inverter Visual Cards Grid -->
+    <div id="inverterCardsGrid" class="inverter-grid" style="margin-top:16px;">
+      <!-- Populated dynamically via JS -->
+    </div>
+
+    <!-- Inverter Detailed Table View -->
+    <div id="inverterTableView" class="table-container" style="display:none; margin-top:16px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Inverter Identifier</th>
+            <th>Operating State</th>
+            <th>DC Input (kW)</th>
+            <th>AC Output (kW)</th>
+            <th>Daily Yield (kWh)</th>
+            <th>Total Yield (MWh)</th>
+            <th>Efficiency</th>
+            <th>Incidents (34 d)</th>
+          </tr>
+        </thead>
+        <tbody id="inverterTableBody">
+          <!-- Populated dynamically -->
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="card">
-    <h2>Ambient Temperature</h2>
-    <div class="stat" id="statTemp">– <small>°C</small></div>
+
+  <!-- Fault & Anomaly Diagnostic Log -->
+  <div class="main-grid" style="margin-bottom:0">
+    <div class="card" style="padding: 22px;">
+      <div class="section-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-rose)"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Automated ML Fault &amp; Anomaly Detection Log <span class="src-tag kaggle static">Kaggle</span>
+        </h2>
+        <span class="inv-badge fault" id="alertCountBadge">1 Active Alert</span>
+      </div>
+
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+        Detector flags a reading when output is >35% below the ML forecast for 2+ consecutive 15-min readings; readings are then grouped into incidents.
+      </p>
+
+      <div id="alertsContainer">
+        <!-- Alert Items rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- Real-time Live Telemetry Log Table -->
+    <div class="card" style="padding: 22px;">
+      <div class="section-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-emerald)"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Real-Time Sensor Bus (Simulated IoT Feed) <span class="src-tag sim static">Simulated</span>
+        </h2>
+        <span class="inv-badge online" style="font-size:10px;">Push: 5.0s</span>
+      </div>
+
+      <div class="table-container" style="max-height: 220px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Node</th>
+              <th>Time</th>
+              <th>DC (kW)</th>
+              <th>AC (kW)</th>
+              <th>Irrad (kW/m²)</th>
+            </tr>
+          </thead>
+          <tbody id="liveBusBody">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
-</div>
 
-<div class="grid">
-  <div class="card chart-card">
-    <h2>Forecast — Next 6 Daylight Hours (avg across inverters)</h2>
-    <canvas id="forecastChart" height="90"></canvas>
-  </div>
-</div>
 
-<div class="grid">
-  <div class="card">
-    <h2>Performance by Inverter</h2>
-    <table id="perfTable">
-      <thead><tr><th>Inverter</th><th>Daily Yield (kWh)</th><th>Total Yield</th><th>Efficiency</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <div class="card">
-    <h2>Fault Alerts</h2>
-    <table id="alertTable">
-      <thead><tr><th>Time</th><th>Inverter</th><th>Actual</th><th>Expected</th><th>Ratio</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
+  <!-- Dashboard Script -->
+  <script>
+    // Where is the API?
+    //  - page opened as a file (double-click)      -> your laptop's API: http://localhost:8000
+    //  - page served by the API (cloud or local)   -> the same address it was loaded from
+    //  - page hosted elsewhere, e.g. GitHub Pages  -> add  ?api=https://your-api-address  to the URL
+    const API_BASE = (() => {
+      const override = new URLSearchParams(location.search).get("api");
+      if (override) return override.replace(/\/+$/, "");
+      return (location.protocol === "http:" || location.protocol === "https:")
+        ? location.origin
+        : "http://localhost:8000";
+    })();
+    document.getElementById("apiEndpointLabel").textContent = API_BASE;
+    let isDemoMode = false;
+    let autoDetectionPassed = false;
+    let refreshCountdown = 30;
+    let mainChartInstance = null;
+    let currentChartTab = 'forecast';
+    let inverterViewMode = 'grid';
+    let currentInverterFilter = 'all';
+    let currentSearchTerm = '';
 
-<div class="grid">
-  <div class="card chart-card">
-    <h2>Optimization — Recommended Load &amp; Battery Schedule (next 24h)</h2>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:10px" id="optimizeSummary"></div>
-    <table id="optimizeTable">
-      <thead><tr><th>Load</th><th>Recommended window</th><th>Load (kW)</th><th>Solar available (kW)</th><th>Solar coverage</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
+    // Cached datasets
+    let invertersData = [];
+    let alertsData = [];
+    let scheduleData = null;
+    let forecastChartData = null;
+    let liveChartData = null;
+    let openMeteoChartData = null;
+    let openMeteoUnavailableReason = null;
 
-<script>
-const API_BASE = "http://localhost:8000";
+    // Inverter friendly naming registry
+    const nameMap = {};
+    // Numbers are assigned from the SORTED list of IDs, so "Inverter #01" is
+    // always the same physical inverter no matter what order the API returns
+    // them in (matches the numbering used in the project documents).
+    function registerInverterNames(keys) {
+      Object.keys(nameMap).forEach(k => delete nameMap[k]);
+      [...keys].sort().forEach((k, i) => {
+        nameMap[k] = `Inverter #${String(i + 1).padStart(2, '0')}`;
+      });
+    }
+    function getFriendlyName(key) {
+      if (!nameMap[key]) {
+        const count = Object.keys(nameMap).length + 1;
+        nameMap[key] = `Inverter #${count.toString().padStart(2, '0')}`;
+      }
+      return nameMap[key];
+    }
+    function escapeHtml(t) {
+      return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    let lastIrradiation = null;
+    let alertSummary = null;
+    let openMeteoState = 'loading';   // 'loading' | 'ok' | 'error'
+    let openMeteoMeta = null;
+    let openMeteoInFlight = false;
 
-async function fetchJSON(path) {
-  const res = await fetch(API_BASE + path);
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
-  return res.json();
-}
+    // High fidelity realistic mock generator for standalone demo preview
+    function generateMockData() {
+      const inverters = [];
+      const keys = [
+        "1BY6WEcdaToolaZ", "1IF53ai7Xc0U56Y", "3PZuoBAID5Wc2HD", "7JYdWkrdaFaM1Z4",
+        "McdE0feGgZa82L1", "VHMLBKoKgZa82L2", "WRcE0feGgZa82L3", "ZaaE0feGgZa82L4",
+        "adce0feGgZa82L5", "bvce0feGgZa82L6", "cxce0feGgZa82L7", "dEce0feGgZa82L8",
+        "eFce0feGgZa82L9", "fGce0feGgZa82L0", "gHce0feGgZa82La", "hIce0feGgZa82Lb",
+        "iJce0feGgZa82Lc", "jKce0feGgZa82Ld", "kLce0feGgZa82Le", "lMce0feGgZa82Lf",
+        "mNce0feGgZa82Lg", "nOce0feGgZa82Lh"
+      ];
 
-function setStatus(ok, msg) {
-  const el = document.getElementById("status");
-  el.innerHTML = `<span class="dot" style="background:${ok ? "var(--good)" : "var(--bad)"}"></span>${msg}`;
-}
+      registerInverterNames(keys);
+      keys.forEach((key, idx) => {
+        const isFaulty = (idx === 7); // Inverter 8 has a slight string underperformance
+        const baseDc = isFaulty ? 320 + Math.random() * 40 : 680 + Math.random() * 90;
+        const eff = isFaulty ? 0.74 : 0.975 + (Math.random() * 0.015);
+        const ac = baseDc * eff;
+        const dailyYield = isFaulty ? 3200 : 6400 + Math.round(Math.random() * 800);
+        const totalYield = 620000 + (idx * 14000) + dailyYield;
 
-let chart;
-let nameMap = {}; // SOURCE_KEY -> "Inverter 1", "Inverter 2", ...
+        inverters.push({
+          SOURCE_KEY: key,
+          friendly: getFriendlyName(key),
+          isFaulty: isFaulty,
+          status: isFaulty ? 'alert' : 'normal',
+          incidentCount: isFaulty ? 1 : 0,
+          DC_POWER: baseDc,
+          AC_POWER: ac,
+          DAILY_YIELD: dailyYield,
+          TOTAL_YIELD: totalYield,
+          AVG_CONVERSION_EFFICIENCY: eff,
+          temp: Math.round(42 + Math.random() * 9)
+        });
+      });
 
-function friendlyName(sourceKey) {
-  if (!nameMap[sourceKey]) {
-    const n = Object.keys(nameMap).length + 1;
-    nameMap[sourceKey] = `Inverter ${n}`;
-  }
-  return nameMap[sourceKey];
-}
-
-function tickClock() {
-  const now = new Date();
-  document.getElementById("liveClock").textContent =
-    "Your local time: " + now.toLocaleString();
-}
-setInterval(tickClock, 1000);
-tickClock();
-
-async function loadWeather() {
-  try {
-    const w = await fetchJSON("/weather/latest");
-    document.getElementById("statIrradiation").innerHTML = `${w.IRRADIATION} <small>kW/m²</small>`;
-    document.getElementById("statTemp").innerHTML = `${w.AMBIENT_TEMPERATURE} <small>°C</small>`;
-    document.getElementById("dataAsOf").textContent =
-      `Dataset's most recent reading: ${w.DATE_TIME} (this is historical demo data, not today's date — see note below)`;
-  } catch (e) { console.error(e); }
-}
-
-async function loadDashboard() {
-  try {
-    await fetchJSON("/health");
-    setStatus(true, "Connected to API");
-  } catch (e) {
-    setStatus(false, "Cannot reach API — make sure `uvicorn api:app --reload --port 8000` is running in the src folder");
-    return;
-  }
-
-  await loadWeather();
-
-  // Performance summary
-  try {
-    const perf = await fetchJSON("/performance/summary");
-
-    // Build a stable, sorted name map the FIRST time only, so "Inverter 1"
-    // always refers to the same physical inverter on every refresh
-    if (Object.keys(nameMap).length === 0) {
-      [...perf].sort((a, b) => a.SOURCE_KEY.localeCompare(b.SOURCE_KEY))
-        .forEach(r => friendlyName(r.SOURCE_KEY));
+      return inverters;
     }
 
-    document.getElementById("statInverters").textContent = perf.length;
-    const totalYield = perf.reduce((s, r) => s + (r.DAILY_YIELD || 0), 0);
-    document.getElementById("statYield").innerHTML = `${totalYield.toFixed(0)} <small>kWh</small>`;
-    const avgEff = perf.reduce((s, r) => s + (r.AVG_CONVERSION_EFFICIENCY || 0), 0) / perf.length;
-    document.getElementById("statEfficiency").innerHTML = `${(avgEff * 100).toFixed(1)} <small>%</small>`;
-
-    const sortedPerf = [...perf].sort((a, b) => {
-      const na = parseInt(friendlyName(a.SOURCE_KEY).replace("Inverter ", ""));
-      const nb = parseInt(friendlyName(b.SOURCE_KEY).replace("Inverter ", ""));
-      return na - nb;
-    });
-
-    const tbody = document.querySelector("#perfTable tbody");
-    tbody.innerHTML = "";
-    sortedPerf.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${friendlyName(r.SOURCE_KEY)} <span style="color:var(--muted);font-size:11px">(${r.SOURCE_KEY})</span></td><td>${r.DAILY_YIELD.toFixed(1)}</td><td>${r.TOTAL_YIELD.toFixed(0)}</td><td>${(r.AVG_CONVERSION_EFFICIENCY*100).toFixed(1)}%</td>`;
-      tbody.appendChild(tr);
-    });
-  } catch (e) { console.error(e); }
-
-  // Anomalies
-  try {
-    const alerts = await fetchJSON("/anomalies");
-    document.getElementById("statAlerts").innerHTML = `<span class="${alerts.length ? "badge-bad" : "badge-ok"}">${alerts.length}</span>`;
-    const tbody = document.querySelector("#alertTable tbody");
-    tbody.innerHTML = "";
-    if (alerts.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="color:var(--muted)">No active faults</td></tr>`;
+    // Switch data mode
+    function switchMode(mode) {
+      if (mode === 'demo') {
+        isDemoMode = true;
+        document.body.classList.add('demo-mode');
+        document.getElementById('btnDemoMode').classList.add('active');
+        document.getElementById('btnAutoMode').classList.remove('active');
+        setConnectionBadge('demo', 'Standalone Demo Mode');
+        loadMockDashboard();
+        switchChartTab(currentChartTab);      // refresh the chart badge: "Demo preview"
+      } else {
+        isDemoMode = false;
+        document.body.classList.remove('demo-mode');
+        document.getElementById('btnAutoMode').classList.add('active');
+        document.getElementById('btnDemoMode').classList.remove('active');
+        refreshDashboard();
+        switchChartTab(currentChartTab);
+      }
     }
-    alerts.slice(0, 15).forEach(a => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${a.DATE_TIME}</td><td>${friendlyName(a.SOURCE_KEY)}</td><td>${a.AC_POWER.toFixed(0)}</td><td>${a.PREDICTED_AC_POWER.toFixed(0)}</td><td class="badge-bad">${(a.PERFORMANCE_RATIO*100).toFixed(0)}%</td>`;
-      tbody.appendChild(tr);
-    });
-  } catch (e) { console.error(e); }
 
-  // Forecast chart
-  try {
-    const result = await fetchJSON("/forecast?hours=6");
-    const forecast = result.data;
-    const byTime = {};
-    forecast.forEach(f => {
-      byTime[f.DATE_TIME] = (byTime[f.DATE_TIME] || 0) + f.PREDICTED_AC_POWER;
-    });
-    const labels = Object.keys(byTime).sort();
-    const values = labels.map(l => byTime[l]);
+    function setConnectionBadge(type, message) {
+      const badge = document.getElementById('connBadge');
+      const text = document.getElementById('connText');
+      badge.className = 'status-badge';
+      if (type === 'live') {
+        badge.classList.add('live');
+      } else if (type === 'error') {
+        badge.classList.add('error');
+      } else if (type === 'demo') {
+        badge.classList.add('demo');
+      }
+      text.textContent = message;
+    }
 
-    const ctx = document.getElementById("forecastChart").getContext("2d");
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: labels.map(l => l.split(" ")[1]),
+    // ---------------- Location + live clock ----------------
+    const PRESET_LOCATIONS = [
+      { name: "Bengaluru, India", lat: 12.9716, lon: 77.5946, tz: "Asia/Kolkata" },
+      { name: "Hyderabad, India", lat: 17.3850, lon: 78.4867, tz: "Asia/Kolkata" },
+      { name: "Chennai, India", lat: 13.0827, lon: 80.2707, tz: "Asia/Kolkata" },
+      { name: "Mumbai, India", lat: 19.0760, lon: 72.8777, tz: "Asia/Kolkata" },
+      { name: "Pune, India", lat: 18.5204, lon: 73.8567, tz: "Asia/Kolkata" },
+      { name: "New Delhi, India", lat: 28.6139, lon: 77.2090, tz: "Asia/Kolkata" },
+      { name: "Jaipur, India", lat: 26.9124, lon: 75.7873, tz: "Asia/Kolkata" },
+      { name: "Jodhpur, India", lat: 26.2389, lon: 73.0243, tz: "Asia/Kolkata" },
+      { name: "Ahmedabad, India", lat: 23.0225, lon: 72.5714, tz: "Asia/Kolkata" },
+      { name: "Kolkata, India", lat: 22.5726, lon: 88.3639, tz: "Asia/Kolkata" },
+      { name: "Dubai, UAE", lat: 25.2048, lon: 55.2708, tz: "Asia/Dubai" },
+      { name: "Singapore", lat: 1.3521, lon: 103.8198, tz: "Asia/Singapore" },
+      { name: "London, UK", lat: 51.5072, lon: -0.1276, tz: "Europe/London" },
+      { name: "New York, USA", lat: 40.7128, lon: -74.0060, tz: "America/New_York" },
+      { name: "Sydney, Australia", lat: -33.8688, lon: 151.2093, tz: "Australia/Sydney" }
+    ];
+    let currentLocation = PRESET_LOCATIONS[0];
+    try {
+      const saved = JSON.parse(localStorage.getItem("solar_location") || "null");
+      if (saved && isFinite(saved.lat) && isFinite(saved.lon) && saved.name) currentLocation = saved;
+    } catch (e) { /* storage unavailable - keep default */ }
+
+    function saveLocation() {
+      try { localStorage.setItem("solar_location", JSON.stringify(currentLocation)); } catch (e) {}
+    }
+    function fmtCoords(lat, lon) {
+      return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
+    }
+    function renderLocation() {
+      document.getElementById("locName").textContent = currentLocation.name;
+      document.getElementById("locCoords").textContent = fmtCoords(currentLocation.lat, currentLocation.lon);
+    }
+
+    // Live date + time AT the selected location (its own timezone)
+    function updateClock() {
+      const now = new Date();
+      const tz = currentLocation.tz || undefined;
+      const timeLocale = tz === "Asia/Kolkata" ? "en-IN" : "en-US";   // en-IN prints "IST"
+      let text;
+      try {
+        const d = now.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric", timeZone: tz });
+        const t = now.toLocaleTimeString(timeLocale, { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short", timeZone: tz });
+        text = `${d} • ${t}`;
+      } catch (e) {
+        text = now.toLocaleString();
+      }
+      document.getElementById("clockDisplay").textContent = text;
+    }
+
+    function toggleLocPanel(ev) {
+      ev.stopPropagation();
+      const panel = document.getElementById("locPanel");
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) {
+        document.getElementById("locError").textContent = "";
+        document.getElementById("locLat").value = currentLocation.lat;
+        document.getElementById("locLon").value = currentLocation.lon;
+      }
+    }
+    document.addEventListener("click", () => { const p = document.getElementById("locPanel"); if (p) p.hidden = true; });
+
+    function setLocation(loc) {
+      currentLocation = { name: loc.name, lat: Number(loc.lat), lon: Number(loc.lon), tz: loc.tz || null };
+      saveLocation();
+      renderLocation();
+      updateClock();
+      document.getElementById("locPanel").hidden = true;
+      // The live-weather forecast belongs to the old place - reload it for the new one
+      openMeteoState = 'loading';
+      openMeteoChartData = null;
+      openMeteoMeta = null;
+      if (currentChartTab === 'openMeteo') switchChartTab('openMeteo');
+      loadOpenMeteo();
+    }
+
+    function applyPreset() {
+      const loc = PRESET_LOCATIONS[Number(document.getElementById("locPreset").value)];
+      if (loc) setLocation(loc);
+    }
+
+    function applyCustom() {
+      const lat = parseFloat(document.getElementById("locLat").value);
+      const lon = parseFloat(document.getElementById("locLon").value);
+      const err = document.getElementById("locError");
+      if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        err.textContent = "Enter a latitude between -90 and 90 and a longitude between -180 and 180.";
+        return;
+      }
+      setLocation({ name: `Custom (${fmtCoords(lat, lon)})`, lat, lon, tz: null });
+    }
+
+    // City search uses Open-Meteo's free geocoding service, called from the browser
+    async function searchCity() {
+      const q = document.getElementById("locSearch").value.trim();
+      const box = document.getElementById("locResults");
+      const err = document.getElementById("locError");
+      err.textContent = "";
+      if (q.length < 2) { err.textContent = "Type at least 2 letters."; return; }
+      box.innerHTML = '<div class="loc-note">Searching…</div>';
+      try {
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const found = (await res.json()).results || [];
+        if (!found.length) { box.innerHTML = '<div class="loc-note">No match. Try another spelling, or use the coordinates box.</div>'; return; }
+        box.innerHTML = "";
+        found.forEach(r => {
+          const label = [r.name, r.admin1, r.country].filter(Boolean).join(", ");
+          const b = document.createElement("button");
+          b.className = "loc-result";
+          b.textContent = `${label}  (${fmtCoords(r.latitude, r.longitude)})`;
+          b.onclick = () => setLocation({ name: [r.name, r.country].filter(Boolean).join(", "), lat: r.latitude, lon: r.longitude, tz: r.timezone });
+          box.appendChild(b);
+        });
+      } catch (e) {
+        box.innerHTML = "";
+        err.textContent = "City search needs internet access in this browser. Use Quick pick or enter coordinates instead.";
+      }
+    }
+
+    (function initLocationPicker() {
+      const sel = document.getElementById("locPreset");
+      sel.innerHTML = PRESET_LOCATIONS.map((l, i) => `<option value="${i}">${l.name}</option>`).join("");
+      const idx = PRESET_LOCATIONS.findIndex(l => l.name === currentLocation.name);
+      if (idx >= 0) sel.value = String(idx);
+      renderLocation();
+    })();
+
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Automated 30s countdown
+    setInterval(() => {
+      refreshCountdown--;
+      if (refreshCountdown <= 0) {
+        refreshCountdown = 30;
+        refreshDashboard(true);
+      }
+      document.getElementById('countdownTimer').textContent = `${refreshCountdown}s`;
+    }, 1000);
+
+    // Faster poll for the live ingestion panel only (the rest refreshes every 30s)
+    setInterval(() => {
+      if (!isDemoMode) { loadLiveStreamTelemetry().catch(() => {}); }
+    }, 5000);
+
+    // API Helper
+    async function apiGet(path) {
+      const res = await fetch(API_BASE + path, { cache: "no-store" });
+      if (!res.ok) {
+        // FastAPI puts the real reason in {"detail": "..."} - surface it
+        let detail = "";
+        try { detail = (await res.json()).detail || ""; } catch (e) {}
+        throw new Error(detail || `HTTP ${res.status} from ${path}`);
+      }
+      return res.json();
+    }
+
+    // Master Refresh Dispatcher
+    async function refreshDashboard(silent = false) {
+      const icon = document.getElementById('refreshIcon');
+      if (icon) icon.style.animation = "pulse 0.8s infinite";
+
+      if (isDemoMode) {
+        loadMockDashboard();
+        if (icon) icon.style.animation = "";
+        return;
+      }
+
+      try {
+        await apiGet("/health");
+        setConnectionBadge('live', 'Connected: FastAPI Live');
+        autoDetectionPassed = true;
+        await loadRealDashboardData();
+      } catch (err) {
+        console.warn("Backend API not reachable at " + API_BASE + ". Seamlessly presenting high-fidelity simulation preview.", err);
+        setConnectionBadge('demo', 'API Offline • Demo Mode Active');
+        loadMockDashboard();
+      } finally {
+        if (icon) icon.style.animation = "";
+      }
+    }
+
+    // Load Live Data from FastAPI backend
+    async function loadRealDashboardData() {
+      try {
+        // 1. Weather & Environmental Sensors
+        const weather = await apiGet("/weather/latest");
+        lastIrradiation = weather.IRRADIATION;
+        document.getElementById("kpiIrradiation").innerHTML = `${weather.IRRADIATION.toFixed(3)} <small>kW/m²</small>`;
+        document.getElementById("kpiAmbientTemp").textContent = `${weather.AMBIENT_TEMPERATURE.toFixed(1)}°C Amb`;
+        document.getElementById("kpiModuleTemp").textContent = `${weather.MODULE_TEMPERATURE.toFixed(1)}°C`;
+        document.getElementById("datasetNote").innerHTML = `Latest Dataset Sample: <strong>${weather.DATE_TIME}</strong>`;
+      } catch (e) { console.error("Weather error", e); }
+
+      try {
+        // 2. Inverter Fleet Performance — merge real per-inverter instantaneous
+        // power (/generation/latest) with daily/total yield + efficiency
+        // (/performance/summary). Previously this estimated DC/AC power from
+        // daily yield with an arbitrary multiplier; now it uses the actual
+        // latest reading per inverter.
+        const perf = await apiGet("/performance/summary");
+        const latestGen = await apiGet("/generation/latest");
+        const genByKey = {};
+        latestGen.forEach(g => { genByKey[g.SOURCE_KEY] = g; });
+
+        registerInverterNames(perf.map(r => r.SOURCE_KEY));
+        invertersData = perf.map(r => {
+          const g = genByKey[r.SOURCE_KEY] || {};
+          return {
+            SOURCE_KEY: r.SOURCE_KEY,
+            friendly: getFriendlyName(r.SOURCE_KEY),
+            isFaulty: false,
+            status: 'normal',
+            incidentCount: 0,
+            DC_POWER: g.DC_POWER || 0,
+            AC_POWER: g.AC_POWER || 0,
+            DAILY_YIELD: r.DAILY_YIELD || 0,
+            TOTAL_YIELD: r.TOTAL_YIELD || 0,
+            AVG_CONVERSION_EFFICIENCY: r.AVG_CONVERSION_EFFICIENCY || 0,
+            temp: 0
+          };
+        });
+
+        // Anomalies, grouped into incidents. An inverter is only "ALERT" if it
+        // has a RECENT incident (ended within the last 24h of the dataset).
+        // Earlier incidents are history: shown as a "past incident" note, not
+        // as a current fault. (Previously ANY alert in the 34-day history
+        // turned the inverter red, which marked 9 of 22 as faulty.)
+        const report = await apiGet("/anomalies/incidents");
+        alertsData = report.incidents;
+        alertSummary = report.summary;
+        const byKey = {};
+        report.incidents.forEach(i => { (byKey[i.SOURCE_KEY] = byKey[i.SOURCE_KEY] || []).push(i); });
+        invertersData.forEach(inv => {
+          const list = byKey[inv.SOURCE_KEY] || [];
+          inv.incidentCount = list.length;
+          inv.lastIncident = list.length ? list[0].END : null;   // list is newest-first
+          if (list.some(i => i.IS_RECENT)) { inv.isFaulty = true; inv.status = 'alert'; }
+          else if (list.length) { inv.status = 'history'; }
+        });
+
+        updateKpiMetrics();
+        renderInverterFleet();
+        renderAlertsList();
+      } catch (e) { console.error("Perf summary error", e); }
+
+      try {
+        // 3. Forecast
+        const fc = await apiGet("/forecast?hours=6");
+        processForecastData(fc.data);
+      } catch (e) { console.error("Forecast error", e); }
+
+      try {
+        // 4. Optimization Schedule
+        const opt = await apiGet("/optimize/schedule");
+        renderOptimizationSchedule(opt);
+      } catch (e) { console.error("Optimization error", e); }
+
+      try {
+        // 5. Live Stream Ingestion Telemetry
+        loadLiveStreamTelemetry();
+      } catch (e) { console.error("Live stream error", e); }
+
+      // 6. Live weather forecast runs on its own: it depends on the internet and
+      // can be slow or blocked, so it must never hold up the rest of the page.
+      loadOpenMeteo();
+    }
+
+    let openMeteoPending = false;
+    async function loadOpenMeteo() {
+      if (openMeteoInFlight) { openMeteoPending = true; return; }   // re-run once the current call ends
+      openMeteoInFlight = true;
+      const asked = { lat: currentLocation.lat, lon: currentLocation.lon };
+      try {
+        const lw = await apiGet(`/forecast/live-weather?hours=6&lat=${asked.lat}&lon=${asked.lon}`);
+        if (asked.lat !== currentLocation.lat || asked.lon !== currentLocation.lon) return;   // user switched place meanwhile
+        openMeteoMeta = lw.meta || null;
+        // Learn the location's real timezone from the forecast, so custom coordinates get the right clock
+        if (openMeteoMeta && openMeteoMeta.timezone && currentLocation.tz !== openMeteoMeta.timezone) {
+          currentLocation.tz = openMeteoMeta.timezone;
+          saveLocation();
+          updateClock();
+        }
+        openMeteoChartData = {
+          labels: lw.data.map(r => r.DATE_TIME.split(" ")[1]),
+          datasets: [{
+            label: `Open-Meteo Live Forecast — ${currentLocation.name} — Total AC Power (kW)`,
+            data: lw.data.map(r => Math.round(r.PREDICTED_TOTAL_AC_POWER)),
+            borderColor: "#06b6d4",
+            backgroundColor: "rgba(6, 182, 212, 0.15)",
+            borderWidth: 2,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 2,
+          }]
+        };
+        openMeteoUnavailableReason = null;
+        openMeteoState = 'ok';
+      } catch (e) {
+        if (asked.lat !== currentLocation.lat || asked.lon !== currentLocation.lon) return;
+        console.error("Live weather error", e);
+        openMeteoChartData = null;
+        openMeteoUnavailableReason = (e && e.message) ? e.message : "Live weather API unreachable";
+        openMeteoState = 'error';
+      } finally {
+        openMeteoInFlight = false;
+        if (currentChartTab === 'openMeteo') switchChartTab('openMeteo');
+        if (openMeteoPending) { openMeteoPending = false; loadOpenMeteo(); }
+      }
+    }
+
+    // Mock dashboard presentation
+    function loadMockDashboard() {
+      invertersData = generateMockData();
+      alertsData = [{
+        SOURCE_KEY: invertersData[7].SOURCE_KEY,
+        START: "2020-06-17 13:30:00", END: "2020-06-17 14:15:00", DURATION_MIN: 60,
+        CONFIRMED_READINGS: 3, MEAN_ACTUAL: Math.round(invertersData[7].AC_POWER), MEAN_EXPECTED: 685,
+        MEAN_RATIO: 0.48, MIN_RATIO: 0.45, SEVERITY: "UNDERPERFORMANCE", IS_RECENT: true
+      }];
+      alertSummary = { alert_readings: 3, incidents: 1, inverters_affected: 1, inverters_recent: 1 };
+
+      updateKpiMetrics();
+      renderInverterFleet();
+      renderAlertsList();
+
+      // Mock Schedule
+      renderOptimizationSchedule({
+        total_predicted_generation_kwh_next_24h: 18450,
+        battery_charge_plan: { recommended_start: "11:15", recommended_end: "14:45" },
+        flexible_load_schedule: [
+          { load: "Electric Vehicle Fleet Fast-Charging", recommended_start: "11:45", recommended_end: "13:30", load_power_kw: 45.0, avg_predicted_solar_available_kw: 620.0, estimated_solar_coverage_pct: 100 },
+          { load: "Central Cooling & Chilled Water Loop", recommended_start: "12:15", recommended_end: "15:00", load_power_kw: 32.5, avg_predicted_solar_available_kw: 580.0, estimated_solar_coverage_pct: 100 },
+          { load: "Agricultural Deep-Well Irrigation Pump", recommended_start: "10:30", recommended_end: "12:30", load_power_kw: 18.0, avg_predicted_solar_available_kw: 490.0, estimated_solar_coverage_pct: 98 },
+          { load: "Plant Auxiliary Washing & Battery Inflow", recommended_start: "13:00", recommended_end: "14:30", load_power_kw: 22.0, avg_predicted_solar_available_kw: 540.0, estimated_solar_coverage_pct: 95 }
+        ]
+      });
+
+      // Mock Forecast Chart Data
+      const hours = ["11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30"];
+      const predVals = [11200, 12800, 14500, 15300, 15450, 15100, 14200, 13100, 11400, 9200, 6800, 3900];
+      const actualVals = [10900, 12600, 14200, 15100, 15200, 14950, 13800, 12900, 11000, 9050, 6600, 3750];
+
+      forecastChartData = {
+        labels: hours,
+        datasets: [
+          {
+            label: "ML Predicted Power (kW)",
+            data: predVals,
+            borderColor: "#f59e0b",
+            backgroundColor: "rgba(245, 158, 11, 0.16)",
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.38,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            pointBackgroundColor: "#f59e0b"
+          },
+          {
+            label: "Actual Observed Power (kW)",
+            data: actualVals,
+            borderColor: "#06b6d4",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            borderDash: [5, 4],
+            tension: 0.38,
+            pointRadius: 2,
+            pointBackgroundColor: "#06b6d4"
+          }
+        ]
+      };
+
+      renderPrimaryChart(forecastChartData);
+      renderMockLiveStreamBus();
+    }
+
+    // Update KPI numbers
+    function updateKpiMetrics() {
+      const n = invertersData.length || 1;
+      const totalAc = invertersData.reduce((acc, i) => acc + (i.AC_POWER || 0), 0);
+      const totalDc = invertersData.reduce((acc, i) => acc + (i.DC_POWER || 0), 0);
+      const totalYield = invertersData.reduce((acc, i) => acc + (i.DAILY_YIELD || 0), 0);
+      const avgEff = invertersData.reduce((acc, i) => acc + (i.AVG_CONVERSION_EFFICIENCY || 0), 0) / n;
+      const alertCount = invertersData.filter(i => i.status === 'alert').length;
+      const withHistory = invertersData.filter(i => i.incidentCount > 0).length;
+      const healthyCount = invertersData.length - alertCount;
+
+      document.getElementById("kpiAcPower").innerHTML = `${Math.round(totalAc).toLocaleString()} <small>kW</small>`;
+      document.getElementById("kpiDcPower").textContent = `${Math.round(totalDc).toLocaleString()} kW`;
+      document.getElementById("kpiDailyYield").innerHTML = `${Math.round(totalYield).toLocaleString()} <small>kWh</small>`;
+      document.getElementById("kpiAvgPerInverter").textContent = `${Math.round(totalYield / n).toLocaleString()} kWh/inv`;
+
+      // 0 kW at night is correct (no sunlight) - say so instead of looking broken
+      const night = !isDemoMode && lastIrradiation !== null && lastIrradiation < 0.05;
+      document.getElementById("kpiPowerNote").textContent = night ? "Night at dataset end" : "Latest reading";
+
+      document.getElementById("kpiInvertersOnline").innerHTML = `${healthyCount} <small>/ ${invertersData.length}</small>`;
+      const uptime = ((healthyCount / n) * 100).toFixed(1);
+      const upEl = document.getElementById("kpiUptimePct");
+      upEl.textContent = `${uptime}% Healthy`;
+      upEl.className = `kpi-trend ${alertCount ? 'danger' : 'up'}`;
+      document.getElementById("kpiPastNote").textContent =
+        alertCount ? `${alertCount} with an active fault`
+        : withHistory ? `${withHistory} had past incidents`
+        : "No incidents on record";
+
+      document.getElementById("kpiEfficiency").innerHTML = `${(avgEff > 1 ? avgEff : avgEff * 100).toFixed(1)} <small>%</small>`;
+
+      // Avoided CO2 metric (standard EPA emission factor ~ 0.709 kg CO2 per kWh solar)
+      const co2Tons = (totalYield * 0.709 / 1000).toFixed(1);
+      document.getElementById("kpiCarbonOffset").innerHTML = `${co2Tons} <small>Tons</small>`;
+      // ~21 kg CO2 absorbed per mature tree per year (commonly cited figure)
+      const trees = Math.round((totalYield * 0.709) / 21);
+      document.getElementById("kpiTrees").textContent = `≈ ${trees.toLocaleString()} Tree-years`;
+      document.getElementById("kpiYieldNote").textContent = `${invertersData.length} inverters summed`;
+
+      // Filter pill counts always reflect the data actually loaded
+      document.getElementById("pillAll").textContent = `All Units (${invertersData.length})`;
+      document.getElementById("pillHealthy").textContent = `Normal (${healthyCount})`;
+      document.getElementById("pillFault").textContent = `Active Fault (${alertCount})`;
+      document.getElementById("pillHistory").textContent = `Had Incidents (${withHistory})`;
+    }
+
+    // Render Inverter Fleet Grid & Table
+    function renderInverterFleet() {
+      const grid = document.getElementById("inverterCardsGrid");
+      const tbody = document.getElementById("inverterTableBody");
+      grid.innerHTML = "";
+      tbody.innerHTML = "";
+
+      let filtered = [...invertersData]
+        .sort((a, b) => a.friendly.localeCompare(b.friendly))
+        .filter(inv => {
+          if (currentInverterFilter === 'healthy') return inv.status !== 'alert';
+          if (currentInverterFilter === 'fault') return inv.status === 'alert';
+          if (currentInverterFilter === 'history') return inv.incidentCount > 0;
+          return true;
+        });
+
+      if (currentSearchTerm) {
+        filtered = filtered.filter(inv =>
+          inv.friendly.toLowerCase().includes(currentSearchTerm.toLowerCase()) ||
+          inv.SOURCE_KEY.toLowerCase().includes(currentSearchTerm.toLowerCase())
+        );
+      }
+
+      filtered.forEach(inv => {
+        const effPct = (inv.AVG_CONVERSION_EFFICIENCY > 1 ? inv.AVG_CONVERSION_EFFICIENCY : inv.AVG_CONVERSION_EFFICIENCY * 100).toFixed(1);
+        const alert = inv.status === 'alert';
+        const past = inv.incidentCount > 0 && !alert;
+        const lastDay = inv.lastIncident ? String(inv.lastIncident).split(" ")[0] : "";
+        const pastChip = inv.incidentCount > 0
+          ? `<div class="inv-chip">${inv.incidentCount} incident${inv.incidentCount > 1 ? 's' : ''} in period${lastDay ? ' • last ' + lastDay : ''}</div>` : "";
+
+        const card = document.createElement("div");
+        card.className = `inverter-card ${alert ? 'fault' : (past ? 'history' : '')}`;
+        card.innerHTML = `
+          <div class="inverter-header">
+            <span class="inv-name">${inv.friendly}</span>
+            <span class="inv-badge ${alert ? 'fault' : 'online'}">${alert ? 'ALERT' : 'NORMAL'}</span>
+          </div>
+          <div style="font-size:11px; color:var(--text-dim); margin-bottom:8px; font-family:'JetBrains Mono'">${inv.SOURCE_KEY}</div>
+          <div class="inv-stats-row">
+            <span>AC Power:</span>
+            <strong>${inv.AC_POWER.toFixed(1)} kW</strong>
+          </div>
+          <div class="inv-stats-row">
+            <span>Daily Yield:</span>
+            <strong>${Math.round(inv.DAILY_YIELD).toLocaleString()} kWh</strong>
+          </div>
+          <div class="inv-stats-row">
+            <span>Efficiency:</span>
+            <strong style="color:${alert ? 'var(--accent-rose)' : 'var(--accent-emerald)'}">${effPct}%</strong>
+          </div>
+          <div class="mini-progress-bar" style="margin-top:8px;">
+            <div class="mini-progress-fill" style="width:${Math.min(100, effPct)}%; background:${alert ? 'var(--accent-rose)' : 'var(--accent-emerald)'}"></div>
+          </div>
+          ${pastChip}
+        `;
+        grid.appendChild(card);
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>${inv.friendly}</strong> <span style="color:var(--text-dim); font-size:11px;">(${inv.SOURCE_KEY})</span></td>
+          <td><span class="inv-badge ${alert ? 'fault' : 'online'}">${alert ? 'ACTIVE FAULT' : 'NORMAL'}</span></td>
+          <td>${inv.DC_POWER.toFixed(1)}</td>
+          <td><strong>${inv.AC_POWER.toFixed(1)}</strong></td>
+          <td>${Math.round(inv.DAILY_YIELD).toLocaleString()}</td>
+          <td>${(inv.TOTAL_YIELD / 1000).toFixed(1)}</td>
+          <td>${effPct}%</td>
+          <td><span class="kpi-trend ${alert ? 'danger' : (past ? '' : 'up')}">${inv.incidentCount}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1; padding:24px; text-align:center; color:var(--text-muted); font-size:13px;">No inverters match this filter.</div>`;
+      }
+    }
+
+    // Render Diagnostic Alerts
+    function renderAlertsList() {
+      const container = document.getElementById("alertsContainer");
+      const badge = document.getElementById("alertCountBadge");
+      container.innerHTML = "";
+
+      if (!alertsData || alertsData.length === 0) {
+        badge.className = "inv-badge online";
+        badge.textContent = "All Systems Nominal";
+        container.innerHTML = `
+          <div style="text-align:center; padding:32px 16px; color:var(--text-muted); font-size:13px;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-emerald); margin-bottom:8px;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            <div>No underperformance incidents detected across all inverter channels.</div>
+          </div>
+        `;
+        return;
+      }
+
+      const recent = alertsData.filter(i => i.IS_RECENT).length;
+      const readings = alertSummary ? alertSummary.alert_readings : alertsData.reduce((a, i) => a + i.CONFIRMED_READINGS, 0);
+      badge.className = `inv-badge ${recent ? 'fault' : 'history'}`;
+      badge.textContent = `${alertsData.length} incident${alertsData.length > 1 ? 's' : ''} • ${readings} flagged readings`;
+
+      const fmtDur = m => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`);
+      const SHOW = 8;
+      alertsData.slice(0, SHOW).forEach(inc => {
+        const outage = inc.MEAN_RATIO < 0.10;     // averaged under 10% of forecast = outage
+        const item = document.createElement("div");
+        item.className = `alert-item ${inc.IS_RECENT ? '' : 'historical'}`;
+        const name = getFriendlyName(inc.SOURCE_KEY);
+        const day = inc.START.split(" ")[0];
+        const t1 = inc.START.split(" ")[1].slice(0, 5);
+        const t2 = inc.END.split(" ")[1].slice(0, 5);
+        const ratio = Math.round(inc.MEAN_RATIO * 100);
+        const action = outage
+          ? "Zero output during daylight — check inverter trip / AC breaker / comms. (A data-logging gap can look identical.)"
+          : `Output at ${ratio}% of forecast — check soiling, shading and string fuses.`;
+        item.innerHTML = `
+          <div>
+            <div class="title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:${inc.IS_RECENT ? 'var(--accent-rose)' : 'var(--accent-solar)'}"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              ${name} <span style="font-weight:400; color:var(--text-dim);">(${inc.SOURCE_KEY})</span>
+              <span style="font-weight:500; font-size:10.5px; color:${inc.IS_RECENT ? 'var(--accent-rose)' : 'var(--text-dim)'};">${inc.IS_RECENT ? '• RECENT' : '• historical'}</span>
+            </div>
+            <div class="subtitle">
+              ${day} ${t1} → ${t2} (${fmtDur(inc.DURATION_MIN)}) • Avg output ${Math.round(inc.MEAN_ACTUAL)} kW vs ${Math.round(inc.MEAN_EXPECTED)} kW forecast
+            </div>
+            <div style="font-size:11px; color:${inc.IS_RECENT ? '#fca5a5' : '#fcd34d'}; margin-top:4px;">${action}</div>
+          </div>
+          <div>
+            <span class="alert-badge-severe ${outage ? '' : 'warn'}">${outage ? (ratio === 0 ? 'Total outage' : 'Outage • ' + ratio + '% of forecast') : ratio + '% of forecast'}</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+
+      if (alertsData.length > SHOW) {
+        const more = document.createElement("div");
+        more.style.cssText = "text-align:center; font-size:11.5px; color:var(--text-dim); padding:6px;";
+        more.textContent = `Showing the ${SHOW} most recent of ${alertsData.length} incidents`;
+        container.appendChild(more);
+      }
+    }
+
+    // Render Optimization Schedule
+    function renderOptimizationSchedule(plan) {
+      scheduleData = plan;
+      const siteNote = document.getElementById("optSiteNote");
+      if (siteNote) {
+        siteNote.textContent = plan.site_installed_kw
+          ? `Plant forecast scaled to a ${plan.site_installed_kw} kW on-site array.` : "";
+      }
+      const list = document.getElementById("optScheduleList");
+      list.innerHTML = "";
+
+      const icons = [
+        `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 10.8 2 11 2 11.2V16c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>`,
+        `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+        `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`,
+        `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`
+      ];
+
+      plan.flexible_load_schedule.forEach((item, idx) => {
+        const card = document.createElement("div");
+        card.className = "opt-card";
+        const iconSvg = icons[idx % icons.length];
+        card.innerHTML = `
+          <div class="opt-info">
+            <div class="opt-icon-wrap">${iconSvg}</div>
+            <div>
+              <div class="opt-title">${item.load}</div>
+              <div class="opt-window">Window: ${item.recommended_start} → ${item.recommended_end}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Demand: ${item.load_power_kw} kW • Solar: ${Math.round(item.avg_predicted_solar_available_kw)} kW</div>
+            </div>
+          </div>
+          <div class="opt-stats">
+            <div class="opt-pct">${item.estimated_solar_coverage_pct}%</div>
+            <div class="opt-coverage-lbl">Solar Covered</div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+
+      // Battery plan (real data from /optimize/schedule)
+      const bp = plan.battery_charge_plan;
+      if (bp) {
+        const short = t => (t || "").split(" ").pop();
+        document.getElementById("battWindow").textContent = `${short(bp.recommended_start)} → ${short(bp.recommended_end)}`;
+        document.getElementById("battWindowTag").textContent = "Plan ready";
+        const pct = Math.min(100, Math.round((bp.avg_predicted_solar_available_kw / 10) * 100));
+        document.getElementById("battSolarFill").style.width = pct + "%";
+      }
+    }
+
+    // Chart Management
+    function renderPrimaryChart(chartData) {
+      const ctx = document.getElementById("primaryChart").getContext("2d");
+      if (mainChartInstance) mainChartInstance.destroy();
+
+      mainChartInstance = new Chart(ctx, {
+        type: "line",
+        data: chartData,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'end',
+              labels: {
+                color: "#94a3b8",
+                boxWidth: 12,
+                boxHeight: 12,
+                font: { family: 'Plus Jakarta Sans', size: 11, weight: '500' }
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#fff',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1,
+              padding: 10,
+              boxPadding: 4,
+              usePointStyle: true,
+              callbacks: {
+                label: function(context) {
+                  return ` ${context.dataset.label}: ${Number(context.raw).toLocaleString()} kW`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#64748b", font: { family: 'JetBrains Mono', size: 10 } },
+              grid: { color: "rgba(255, 255, 255, 0.05)" }
+            },
+            y: {
+              ticks: { color: "#64748b", font: { family: 'JetBrains Mono', size: 10 } },
+              grid: { color: "rgba(255, 255, 255, 0.05)" },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // Process backend forecast data
+    function processForecastData(rawList) {
+      const byTime = {};
+      rawList.forEach(r => {
+        byTime[r.DATE_TIME] = (byTime[r.DATE_TIME] || 0) + r.PREDICTED_AC_POWER;
+      });
+      const sortedKeys = Object.keys(byTime).sort();
+      const labels = sortedKeys.map(k => k.split(" ")[1] || k);
+      const values = sortedKeys.map(k => Math.round(byTime[k]));
+
+      forecastChartData = {
+        labels: labels,
         datasets: [{
-          label: "Predicted Total AC Power (kW)",
+          label: "Predicted Plant AC Generation (kW)",
           data: values,
-          borderColor: "#ffb020",
-          backgroundColor: "rgba(255,176,32,0.15)",
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.16)",
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 2.5,
+          pointBackgroundColor: "#f59e0b"
+        }]
+      };
+
+      if (currentChartTab === 'forecast') {
+        switchChartTab('forecast');     // re-renders chart AND updates the peak pill from real data
+      }
+    }
+
+    // Load Live Stream Telemetry from API
+    async function loadLiveStreamTelemetry() {
+      // Real ingestion status for the ticker footer (replaces hardcoded text)
+      try {
+        const st = await apiGet("/live/status");
+        document.getElementById("tickerStatus").textContent =
+          st.running ? "● SIMULATED SENSOR STREAM ACTIVE" : "● STREAM STOPPED";
+        document.getElementById("tickerTicks").textContent =
+          `${st.ticks} ticks • ${st.buffered_rows} readings buffered • every ${st.tick_interval_seconds}s`;
+      } catch (e) { console.error("Live status error", e); }
+
+      const history = await apiGet("/live/history?minutes=10");
+      const byTime = {};
+      history.forEach(r => {
+        byTime[r.DATE_TIME] = (byTime[r.DATE_TIME] || 0) + (r.AC_POWER / 1000);
+      });
+      const keys = Object.keys(byTime).sort();
+      const labels = keys.map(k => k.split(" ")[1] || k);
+      const values = keys.map(k => byTime[k].toFixed(2));
+
+      liveChartData = {
+        labels: labels,
+        datasets: [{
+          label: "Live Telemetry Feed (kW)",
+          data: values,
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.15)",
+          borderWidth: 2,
           fill: true,
           tension: 0.3,
-          pointRadius: 0,
+          pointRadius: 2
         }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { labels: { color: "#8fa1b3" } } },
-        scales: {
-          x: { ticks: { color: "#8fa1b3", maxTicksLimit: 10 }, grid: { color: "#263340" } },
-          y: { ticks: { color: "#8fa1b3" }, grid: { color: "#263340" } }
+      };
+
+      if (currentChartTab === 'liveStream') {
+        renderPrimaryChart(liveChartData);
+      }
+
+      const latest = await apiGet("/live/latest");
+      const tbody = document.getElementById("liveBusBody");
+      tbody.innerHTML = "";
+      latest.slice(0, 6).forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>${r.SOURCE_KEY}</strong></td>
+          <td>${r.DATE_TIME.split(" ")[1] || r.DATE_TIME}</td>
+          <td>${(r.DC_POWER / 1000).toFixed(2)}</td>
+          <td style="color:var(--accent-emerald); font-weight:700;">${(r.AC_POWER / 1000).toFixed(2)}</td>
+          <td>${r.IRRADIATION}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Mock Live Stream Ingestion Bus
+    function renderMockLiveStreamBus() {
+      const tbody = document.getElementById("liveBusBody");
+      tbody.innerHTML = "";
+      const now = new Date();
+      for (let i = 1; i <= 6; i++) {
+        const tr = document.createElement("tr");
+        const timeStr = new Date(now.getTime() - i * 5000).toTimeString().split(' ')[0];
+        tr.innerHTML = `
+          <td><strong>Inverter #${i.toString().padStart(2, '0')}</strong></td>
+          <td>${timeStr}</td>
+          <td>678.4</td>
+          <td style="color:var(--accent-emerald); font-weight:700;">661.8</td>
+          <td>0.824</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // Chart tab switcher
+    function switchChartTab(tab) {
+      currentChartTab = tab;
+      // Works whether the user clicked a tab or the page re-rendered it by itself
+      document.querySelectorAll('.chart-tab-btn').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.tab === tab));
+
+      const tagEl = document.getElementById("chartSourceTag");
+      if (tagEl) {
+        const byTab = { forecast: ['kaggle', 'Kaggle'], liveStream: ['sim', 'Simulated'], openMeteo: ['live', 'Live'] };
+        const [cls, label] = isDemoMode ? ['demo', 'Demo preview'] : (byTab[tab] || byTab.forecast);
+        tagEl.className = `src-tag ${cls}`;
+        tagEl.textContent = label;
+      }
+      const subtitle = document.getElementById("chartSubtitle");
+      const pill = document.getElementById("chartHighlightPill");
+
+      if (tab === 'forecast') {
+        subtitle.textContent = "Random Forest Regression Model (R² = 0.979) predicting plant aggregate output";
+        if (forecastChartData && !isDemoMode) {
+          const vals = forecastChartData.datasets[0].data.map(Number);
+          pill.textContent = `Peak Predicted: ${Math.round(Math.max(...vals)).toLocaleString()} kW`;
+        } else {
+          pill.textContent = "Peak Predicted: 15,240 kW (demo)";
+        }
+        if (forecastChartData) renderPrimaryChart(forecastChartData);
+      } else if (tab === 'liveStream') {
+        subtitle.textContent = "Simulated IoT sensor feed using this computer's real clock — new readings every few seconds";
+        pill.textContent = "Feed Active • 100% Signal";
+        if (liveChartData) {
+          renderPrimaryChart(liveChartData);
+        } else {
+          // Mock stream curve
+          renderPrimaryChart({
+            labels: ["14:00", "14:02", "14:04", "14:06", "14:08", "14:10"],
+            datasets: [{
+              label: "Real-time Plant Inflow (kW)",
+              data: [14100, 14180, 14220, 14190, 14280, 14310],
+              borderColor: "#10b981",
+              backgroundColor: "rgba(16, 185, 129, 0.15)",
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3
+            }]
+          });
+        }
+      } else if (tab === 'openMeteo') {
+        if (isDemoMode) {
+          subtitle.textContent = "Demo preview — Open-Meteo satellite weather forecast (illustrative)";
+          pill.textContent = "Demo Preview";
+          renderPrimaryChart({
+            labels: ["09:00", "11:00", "13:00", "15:00", "17:00", "19:00"],
+            datasets: [{
+              label: "Open-Meteo Solar Potential (kW) — demo preview, not live",
+              data: [6200, 12800, 15400, 13100, 7100, 800],
+              borderColor: "#06b6d4",
+              backgroundColor: "rgba(6, 182, 212, 0.15)",
+              borderWidth: 2,
+              fill: true,
+              tension: 0.35
+            }]
+          });
+        } else if (openMeteoState === 'ok' && openMeteoChartData) {
+          const cached = openMeteoMeta && openMeteoMeta.source === 'cache';
+          subtitle.innerHTML = cached
+            ? `Showing the <strong>last saved</strong> Open-Meteo forecast (fetched ${escapeHtml(openMeteoMeta.fetched_at)}) — live request failed.`
+            : `Real forecasted irradiance for ${escapeHtml(currentLocation.name)} from Open-Meteo, run through the trained model — genuine current dates`;
+          pill.textContent = cached ? "Cached forecast" : "Live from Open-Meteo";
+          renderPrimaryChart(openMeteoChartData);
+        } else if (openMeteoState === 'loading') {
+          subtitle.textContent = "Contacting Open-Meteo…";
+          pill.textContent = "Loading";
+          if (mainChartInstance) { mainChartInstance.destroy(); mainChartInstance = null; }
+        } else {
+          subtitle.innerHTML = `Open-Meteo could not be reached: <span style="color:#fca5a5">${escapeHtml(openMeteoUnavailableReason || "unknown error")}</span><br>` +
+            `Open <a href="${API_BASE}/weather/diagnose" target="_blank" style="color:var(--accent-cyan)">${API_BASE}/weather/diagnose</a> to see exactly why (DNS / firewall / certificate).`;
+          pill.textContent = "Offline";
+          if (mainChartInstance) { mainChartInstance.destroy(); mainChartInstance = null; }
         }
       }
+    }
+
+    // Filter Inverters
+    function filterInverters(filterType, element) {
+      currentInverterFilter = filterType;
+      document.querySelectorAll('.filter-pill').forEach(btn => btn.classList.remove('active'));
+      element.classList.add('active');
+      renderInverterFleet();
+    }
+
+    function handleSearch(term) {
+      currentSearchTerm = term;
+      renderInverterFleet();
+    }
+
+    // Toggle Grid vs Table view
+    function switchInverterView(mode) {
+      inverterViewMode = mode;
+      const grid = document.getElementById("inverterCardsGrid");
+      const table = document.getElementById("inverterTableView");
+      const gridBtn = document.getElementById("viewGridBtn");
+      const tableBtn = document.getElementById("viewTableBtn");
+
+      if (mode === 'grid') {
+        grid.style.display = "grid";
+        table.style.display = "none";
+        gridBtn.classList.add('active');
+        tableBtn.classList.remove('active');
+      } else {
+        grid.style.display = "none";
+        table.style.display = "block";
+        gridBtn.classList.remove('active');
+        tableBtn.classList.add('active');
+      }
+    }
+
+    // Initialization
+    window.addEventListener("DOMContentLoaded", () => {
+      refreshDashboard();
     });
-  } catch (e) { console.error(e); }
-
-  // Optimization schedule
-  try {
-    const plan = await fetchJSON("/optimize/schedule");
-    document.getElementById("optimizeSummary").textContent =
-      `Predicted generation, next 24h: ${plan.total_predicted_generation_kwh_next_24h} kWh. ` +
-      `Battery charge window: ${plan.battery_charge_plan.recommended_start} → ${plan.battery_charge_plan.recommended_end}.`;
-
-    const tbody = document.querySelector("#optimizeTable tbody");
-    tbody.innerHTML = "";
-    plan.flexible_load_schedule.forEach(item => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${item.load}</td><td>${item.recommended_start} → ${item.recommended_end}</td><td>${item.load_power_kw}</td><td>${item.avg_predicted_solar_available_kw}</td><td class="${item.estimated_solar_coverage_pct >= 80 ? 'badge-ok' : ''}">${item.estimated_solar_coverage_pct}%</td>`;
-      tbody.appendChild(tr);
-    });
-  } catch (e) { console.error(e); }
-}
-
-loadDashboard();
-setInterval(loadDashboard, 30000); // refresh every 30s
-</script>
-
+  </script>
 </body>
 </html>
