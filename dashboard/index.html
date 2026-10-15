@@ -864,6 +864,38 @@
     .src-legend .src-tag { margin-left: 0; margin-right: 6px; }
     body.demo-mode .src-legend, body.demo-mode .src-tag.static { display: none; }
 
+    /* Login + message overlay */
+    .overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(3, 7, 18, 0.86); backdrop-filter: blur(6px);
+    }
+    .overlay[hidden] { display: none; }
+    .auth-card {
+      width: 380px; max-width: 92vw; padding: 26px;
+      background: #0e1522; border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+    }
+    .auth-card h2 { margin: 0 0 6px; font-size: 20px; }
+    .auth-card p { margin: 0 0 16px; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+    .auth-card label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); margin: 12px 0 4px; }
+    .auth-card input {
+      width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit;
+      background: var(--bg-surface); color: var(--text-main);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    .auth-card input:focus { outline: none; border-color: var(--accent-cyan); }
+    .auth-card .auth-btn {
+      width: 100%; margin-top: 18px; padding: 11px; font-size: 14px; font-weight: 700;
+      background: var(--accent-cyan); color: #04222a; border: none; border-radius: 8px; cursor: pointer; font-family: inherit;
+    }
+    .auth-card .auth-btn:disabled { opacity: .6; cursor: wait; }
+    #loginError { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: #fca5a5; }
+    .auth-card pre {
+      max-height: 55vh; overflow: auto; margin: 0 0 14px; padding: 12px; font-size: 11.5px;
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap;
+    }
+
     /* Location picker */
     .loc-wrap { position: relative; display: inline-block; }
     .loc-btn {
@@ -994,6 +1026,8 @@
       </div>
 
       <!-- Refresh Action -->
+      <span id="secBadge" class="src-tag live" style="display:none; margin:0;"></span>
+      <button class="btn" id="btnLogout" style="display:none" onclick="logout()" title="Sign out of this session">Sign out</button>
       <button class="btn" onclick="refreshDashboard()" title="Force instant data poll">
         <svg id="refreshIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
         Refresh
@@ -1337,6 +1371,29 @@
 
 
   <!-- Dashboard Script -->
+  <div class="overlay" id="loginOverlay" hidden>
+    <div class="auth-card">
+      <h2>Sign in</h2>
+      <p>This system is protected. Enter the username and password you were given to view the plant data.</p>
+      <form id="loginForm" onsubmit="submitLogin(event)" autocomplete="on">
+        <label for="loginUser">Username</label>
+        <input id="loginUser" name="username" type="text" autocomplete="username" required>
+        <label for="loginPass">Password</label>
+        <input id="loginPass" name="password" type="password" autocomplete="current-password" required>
+        <button class="auth-btn" id="loginBtn" type="submit">Sign in</button>
+        <div id="loginError"></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="overlay" id="jsonModal" hidden onclick="closeJsonModal()">
+    <div class="auth-card" style="width:560px" onclick="event.stopPropagation()">
+      <h2 id="jsonModalTitle"></h2>
+      <pre id="jsonModalBody"></pre>
+      <button class="auth-btn" style="margin-top:0" onclick="closeJsonModal()">Close</button>
+    </div>
+  </div>
+
   <script>
     // Where is the API?
     //  - page opened as a file (double-click)      -> your laptop's API: http://localhost:8000
@@ -1350,6 +1407,116 @@
         : "http://localhost:8000";
     })();
     document.getElementById("apiEndpointLabel").textContent = API_BASE;
+
+    // ---------------- Login / session ----------------
+    // The server decides whether a login is needed (GET /auth/status). The token is kept in
+    // sessionStorage, so closing the tab signs you out, and it is only ever sent to our own API.
+    const TOKEN_KEY = "solar_auth";
+    let authRequired = false;
+    let loginVisible = false;
+
+    function getToken() {
+      try {
+        const t = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || "null");
+        if (t && t.exp * 1000 > Date.now()) return t.token;
+        sessionStorage.removeItem(TOKEN_KEY);
+      } catch (e) { /* storage unavailable */ }
+      return null;
+    }
+    function saveToken(token, exp) { try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ token, exp })); } catch (e) {} }
+    function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+    function authBlocked() { return authRequired && !getToken(); }
+
+    function updateAuthUI() {
+      const https = location.protocol === "https:";
+      const badge = document.getElementById("secBadge");
+      const out = document.getElementById("btnLogout");
+      out.style.display = (authRequired && getToken()) ? "" : "none";
+      const text = [https ? "HTTPS" : "", authRequired ? "Login on" : ""].filter(Boolean).join(" • ");
+      badge.textContent = text ? "🔒 " + text : "";
+      badge.style.display = text ? "" : "none";
+    }
+
+    function showLogin(message) {
+      loginVisible = true;
+      document.getElementById("loginOverlay").hidden = false;
+      if (message) document.getElementById("loginError").textContent = message;
+      const u = document.getElementById("loginUser");
+      if (u && !u.value) u.focus(); else document.getElementById("loginPass").focus();
+    }
+    function hideLogin() {
+      loginVisible = false;
+      document.getElementById("loginError").textContent = "";
+      document.getElementById("loginOverlay").hidden = true;
+      document.getElementById("loginPass").value = "";
+    }
+
+    window.addEventListener("unhandledrejection", ev => {
+      if (ev.reason && ev.reason.message === "Login required") ev.preventDefault();
+    });
+
+    async function initAuth() {
+      try {
+        const res = await fetch(API_BASE + "/auth/status", { cache: "no-store" });
+        authRequired = res.ok ? !!(await res.json()).auth_required : false;
+      } catch (e) {
+        authRequired = false;     // server unreachable: the normal demo fallback handles it
+      }
+      updateAuthUI();
+      if (authBlocked()) showLogin();
+    }
+
+    async function submitLogin(ev) {
+      ev.preventDefault();
+      const btn = document.getElementById("loginBtn");
+      const err = document.getElementById("loginError");
+      btn.disabled = true; err.textContent = "";
+      try {
+        const res = await fetch(API_BASE + "/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("loginUser").value.trim(),
+            password: document.getElementById("loginPass").value
+          })
+        });
+        let body = {};
+        try { body = await res.json(); } catch (e) {}
+        if (res.ok && body.access_token) {
+          saveToken(body.access_token, body.expires_at);
+          hideLogin();
+          updateAuthUI();
+          refreshCountdown = 30;
+          refreshDashboard();
+        } else {
+          err.textContent = body.detail || "Sign-in failed. Please try again.";
+        }
+      } catch (e) {
+        err.textContent = "Cannot reach the server. Check your connection and try again.";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function logout() {
+      clearToken();
+      updateAuthUI();
+      showLogin("You have been signed out.");
+    }
+
+    function showJsonModal(title, obj) {
+      document.getElementById("jsonModalTitle").textContent = title;
+      document.getElementById("jsonModalBody").textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      document.getElementById("jsonModal").hidden = false;
+    }
+    function closeJsonModal() { document.getElementById("jsonModal").hidden = true; }
+
+    async function runDiagnose(ev) {
+      if (ev) ev.preventDefault();
+      showJsonModal("Connection check (Python to Open-Meteo)", "Running…");
+      try { showJsonModal("Connection check (Python to Open-Meteo)", await apiGet("/weather/diagnose")); }
+      catch (e) { showJsonModal("Connection check failed", e.message); }
+    }
     let isDemoMode = false;
     let autoDetectionPassed = false;
     let refreshCountdown = 30;
@@ -1612,12 +1779,70 @@
 
     // Faster poll for the live ingestion panel only (the rest refreshes every 30s)
     setInterval(() => {
-      if (!isDemoMode) { loadLiveStreamTelemetry().catch(() => {}); }
+      if (!isDemoMode && !authBlocked()) { loadLiveStreamTelemetry().catch(() => {}); }
     }, 5000);
 
     // API Helper
+    async function apiPost(path, body) {
+      const token = getToken();
+      if (authRequired && !token) {
+        if (!loginVisible) showLogin();
+        throw new Error("Login required");
+      }
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      const res = await fetch(API_BASE + path, { method: "POST", cache: "no-store", headers, body: JSON.stringify(body) });
+      if (res.status === 401) {
+        authRequired = true; clearToken(); updateAuthUI();
+        showLogin(token ? "Your session expired. Please sign in again." : "");
+        throw new Error("Login required");
+      }
+      if (!res.ok) {
+        let detail = "";
+        try { detail = (await res.json()).detail || ""; } catch (e) {}
+        throw new Error(detail || `HTTP ${res.status} from ${path}`);
+      }
+      return res.json();
+    }
+
+    // Fallback for the live weather tab. A free cloud server shares its outgoing address with many
+    // other apps, and Open-Meteo limits free use per address (HTTP 429). The viewer's own browser has
+    // its own address, so it fetches the weather and hands it to our API to run through the model.
+    async function fetchWeatherViaBrowser(loc, serverErr) {
+      let w;
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}` +
+                    `&hourly=shortwave_radiation,temperature_2m&forecast_days=2&timezone=auto`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        w = await res.json();
+      } catch (e) {
+        throw new Error(`${serverErr.message}  (the browser could not reach Open-Meteo either: ${e.message})`);
+      }
+      return apiPost("/forecast/live-weather/from-browser", {
+        hourly: w.hourly, timezone: w.timezone, utc_offset_seconds: w.utc_offset_seconds,
+        hours: 6, lat: loc.lat, lon: loc.lon
+      });
+    }
+
     async function apiGet(path) {
-      const res = await fetch(API_BASE + path, { cache: "no-store" });
+      const token = getToken();
+      if (authRequired && !token) {
+        if (!loginVisible) showLogin();
+        throw new Error("Login required");
+      }
+      const res = await fetch(API_BASE + path, {
+        cache: "no-store",
+        headers: token ? { "Authorization": "Bearer " + token } : {}
+      });
+      if (res.status === 401) {
+        // missing, expired or invalid token: ask for the password again
+        authRequired = true;
+        clearToken();
+        updateAuthUI();
+        showLogin(token ? "Your session expired. Please sign in again." : "");
+        throw new Error("Login required");
+      }
       if (!res.ok) {
         // FastAPI puts the real reason in {"detail": "..."} - surface it
         let detail = "";
@@ -1629,6 +1854,7 @@
 
     // Master Refresh Dispatcher
     async function refreshDashboard(silent = false) {
+      if (authBlocked()) return;       // wait for the user to sign in
       const icon = document.getElementById('refreshIcon');
       if (icon) icon.style.animation = "pulse 0.8s infinite";
 
@@ -1730,7 +1956,7 @@
 
       try {
         // 5. Live Stream Ingestion Telemetry
-        loadLiveStreamTelemetry();
+        loadLiveStreamTelemetry().catch(e => console.error('Live stream error', e));
       } catch (e) { console.error("Live stream error", e); }
 
       // 6. Live weather forecast runs on its own: it depends on the internet and
@@ -1744,7 +1970,17 @@
       openMeteoInFlight = true;
       const asked = { lat: currentLocation.lat, lon: currentLocation.lon };
       try {
-        const lw = await apiGet(`/forecast/live-weather?hours=6&lat=${asked.lat}&lon=${asked.lon}`);
+        let lw;
+        try {
+          lw = await apiGet(`/forecast/live-weather?hours=6&lat=${asked.lat}&lon=${asked.lon}`);
+          if (lw.meta && lw.meta.source === 'cache') {
+            // the server only has an old saved forecast: try for a genuinely live one via the browser
+            try { lw = await fetchWeatherViaBrowser(asked, new Error("server copy is old")); } catch (e) { /* keep the saved one */ }
+          }
+        } catch (serverErr) {
+          if (serverErr.message === "Login required") throw serverErr;
+          lw = await fetchWeatherViaBrowser(asked, serverErr);
+        }
         if (asked.lat !== currentLocation.lat || asked.lon !== currentLocation.lon) return;   // user switched place meanwhile
         openMeteoMeta = lw.meta || null;
         // Learn the location's real timezone from the forecast, so custom coordinates get the right clock
@@ -2309,11 +2545,16 @@
             }]
           });
         } else if (openMeteoState === 'ok' && openMeteoChartData) {
-          const cached = openMeteoMeta && openMeteoMeta.source === 'cache';
+          const src = openMeteoMeta && openMeteoMeta.source;
+          const cached = src === 'cache';
+          const viaBrowser = src === 'browser';
+          const ageNote = (openMeteoMeta && openMeteoMeta.age_minutes > 0) ? ` (fetched ${openMeteoMeta.age_minutes} min ago)` : "";
           subtitle.innerHTML = cached
             ? `Showing the <strong>last saved</strong> Open-Meteo forecast (fetched ${escapeHtml(openMeteoMeta.fetched_at)}) — live request failed.`
-            : `Real forecasted irradiance for ${escapeHtml(currentLocation.name)} from Open-Meteo, run through the trained model — genuine current dates`;
-          pill.textContent = cached ? "Cached forecast" : "Live from Open-Meteo";
+            : viaBrowser
+              ? `Real forecast for ${escapeHtml(currentLocation.name)}, fetched by <strong>your browser</strong> from Open-Meteo (the server's own connection was rate-limited) and run through the trained model.`
+              : `Real forecasted irradiance for ${escapeHtml(currentLocation.name)} from Open-Meteo, run through the trained model — genuine current dates${ageNote}`;
+          pill.textContent = cached ? "Cached forecast" : (viaBrowser ? "Live (via your browser)" : "Live from Open-Meteo");
           renderPrimaryChart(openMeteoChartData);
         } else if (openMeteoState === 'loading') {
           subtitle.textContent = "Contacting Open-Meteo…";
@@ -2321,7 +2562,7 @@
           if (mainChartInstance) { mainChartInstance.destroy(); mainChartInstance = null; }
         } else {
           subtitle.innerHTML = `Open-Meteo could not be reached: <span style="color:#fca5a5">${escapeHtml(openMeteoUnavailableReason || "unknown error")}</span><br>` +
-            `Open <a href="${API_BASE}/weather/diagnose" target="_blank" style="color:var(--accent-cyan)">${API_BASE}/weather/diagnose</a> to see exactly why (DNS / firewall / certificate).`;
+            `<a href="#" onclick="runDiagnose(event)" style="color:var(--accent-cyan)">Run the connection check</a> to see exactly why (DNS / firewall / certificate).`;
           pill.textContent = "Offline";
           if (mainChartInstance) { mainChartInstance.destroy(); mainChartInstance = null; }
         }
@@ -2363,8 +2604,9 @@
     }
 
     // Initialization
-    window.addEventListener("DOMContentLoaded", () => {
-      refreshDashboard();
+    window.addEventListener("DOMContentLoaded", async () => {
+      await initAuth();
+      refreshDashboard();       // returns immediately if a login is still needed
     });
   </script>
 </body>

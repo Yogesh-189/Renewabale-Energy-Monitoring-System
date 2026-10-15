@@ -14,13 +14,17 @@ environment — it hasn't been executed in this session. To run it locally:
 Then open http://localhost:8000/docs for interactive API docs.
 
 Endpoints:
-    GET  /health                       -> liveness check
+    GET  /health                       -> liveness check (public)
+    GET  /auth/status                  -> is a login required? (public)
+    POST /auth/login                   -> sign in, receive an access token (public)
+    (every other endpoint needs  Authorization: Bearer <token>  when AUTH_PASSWORD is set)
     GET  /generation/latest            -> most recent readings per inverter (historical dataset)
     GET  /weather/latest               -> most recent weather reading (historical dataset)
     GET  /forecast?hours=6             -> forecast for the next N hours
     GET  /anomalies                    -> confirmed underperformance readings (15-min rows)
     GET  /anomalies/incidents          -> the same, grouped into incidents (recent vs historical)
     GET  /forecast/live-weather        -> forecast from a REAL weather forecast (Open-Meteo)
+    POST /forecast/live-weather/from-browser -> same, with weather fetched by the viewer's browser (fallback)
     GET  /weather/diagnose             -> why can't Python reach Open-Meteo? step-by-step check
     GET  /performance/summary          -> daily yield + efficiency per inverter
     GET  /optimize/schedule            -> recommended load/battery schedule
@@ -37,7 +41,10 @@ import warnings
 import webbrowser
 import threading
 from datetime import timedelta
-from fastapi import FastAPI, HTTPException
+from typing import List, Optional
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,22 +54,77 @@ from train_forecast_model import FEATURES
 from anomaly_detection import detect_anomalies, group_incidents
 from optimize_schedule import get_forecast_curve, recommend_schedule, SITE_INSTALLED_KW
 from live_ingestion import live_store
+from security import (AuthConfig, LoginThrottle, attempt_login, authorize, client_ip,
+                      security_headers)
 from weather_api import (fetch_live_weather_with_meta, build_live_feature_rows, fit_module_temp_offset,
-                         diagnose_connectivity, DEFAULT_LAT, DEFAULT_LON)
+                         diagnose_connectivity, df_from_payload, DEFAULT_LAT, DEFAULT_LON)
 
 # scikit-learn prints this harmless notice whenever a multi-threaded model is
 # called from FastAPI's worker threads; it only clutters the terminal.
 warnings.filterwarnings("ignore", message=".*sklearn.utils.parallel.delayed.*")
 
-app = FastAPI(title="Solar Monitoring & Optimization API", version="0.1.0")
+# ---------------------------------------------------------------------------
+# Security (see security.py). The login turns on when AUTH_PASSWORD is set in
+# the server's environment; otherwise the API stays open for local development.
+# ---------------------------------------------------------------------------
+AUTH = AuthConfig()
+THROTTLE = LoginThrottle()
+bearer_scheme = HTTPBearer(auto_error=False, description="Paste the access_token from POST /auth/login")
+
+for _line in AUTH.describe():
+    print(f"[security] {_line}")
+
+
+def require_auth(request: Request,
+                 credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme)):
+    """Runs before EVERY endpoint. Health check, login and status are exempt
+    (see PUBLIC_PATHS in security.py); everything else needs a valid token."""
+    allowed, reason = authorize(AUTH, request.url.path, credentials.credentials if credentials else None)
+    if not allowed:
+        raise HTTPException(status_code=401, detail=reason, headers={"WWW-Authenticate": "Bearer"})
+
+
+app = FastAPI(title="Solar Monitoring & Optimization API", version="0.2.0",
+              dependencies=[Depends(require_auth)])
 
 # Allow the dashboard (running on a different port/origin) to call this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)   # Render terminates HTTPS in front of us
+    for name, value in security_headers(scheme, request.url.path).items():
+        response.headers[name] = value
+    return response
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.get("/auth/status")
+def auth_status():
+    """Public. Tells the dashboard whether it must show a login screen."""
+    return {"auth_required": AUTH.enabled, "token_hours": AUTH.token_hours}
+
+
+@app.post("/auth/login")
+def login(body: LoginRequest, request: Request):
+    """Public. Exchange username + password for a time-limited access token."""
+    ip = client_ip(request.headers.get("x-forwarded-for"), request.client.host if request.client else None)
+    status, payload = attempt_login(AUTH, THROTTLE, body.username, body.password, ip)
+    if status != 200:
+        headers = {"Retry-After": str(payload["retry_after"])} if status == 429 else None
+        raise HTTPException(status_code=status, detail=payload["detail"], headers=headers)
+    return payload
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "forecast_model.joblib")
 
@@ -285,7 +347,14 @@ def forecast_live_weather(hours: int = 6, lat: float = DEFAULT_LAT, lon: float =
         weather_df, meta = fetch_live_weather_with_meta(lat=lat, lon=lon, hours=hours)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    return _forecast_from_weather(weather_df, meta, hours, lat, lon)
 
+
+def _forecast_from_weather(weather_df, meta, hours, lat, lon):
+    """Weather table in, model predictions out (shared by both live-weather routes)."""
+    model = get_model()
+    n_inverters = get_data()["SOURCE_KEY"].nunique()
+    module_slope, module_intercept = get_module_temp_offset()
     feature_rows = build_live_feature_rows(weather_df, module_slope, module_intercept, hours=hours)
     preds = model.predict(pd.DataFrame(feature_rows)[FEATURES])      # one batch
 
@@ -298,6 +367,46 @@ def forecast_live_weather(hours: int = 6, lat: float = DEFAULT_LAT, lon: float =
             "PREDICTED_TOTAL_AC_POWER": round(float(pred_per_inverter) * n_inverters, 2),
         })
     return {"location": {"lat": lat, "lon": lon}, "source": "Open-Meteo", "meta": meta, "data": out}
+
+
+class BrowserHourly(BaseModel):
+    time: List[str]
+    shortwave_radiation: List[Optional[float]]
+    temperature_2m: List[Optional[float]]
+
+
+class BrowserWeather(BaseModel):
+    hourly: BrowserHourly
+    timezone: Optional[str] = None
+    utc_offset_seconds: Optional[int] = None
+    hours: int = 6
+    lat: float = DEFAULT_LAT
+    lon: float = DEFAULT_LON
+
+
+@app.post("/forecast/live-weather/from-browser")
+def forecast_live_weather_from_browser(body: BrowserWeather):
+    """
+    Same forecast as /forecast/live-weather, but the weather was fetched by the
+    VIEWER'S BROWSER and sent here. The dashboard uses this when the server's own
+    connection to Open-Meteo is rate-limited (HTTP 429) or blocked, which happens
+    on free cloud servers that share one outgoing address with many other apps.
+    The data is validated, used once, and never cached for other viewers.
+    """
+    if not (-90 <= body.lat <= 90 and -180 <= body.lon <= 180):
+        raise HTTPException(status_code=400, detail="Latitude must be -90..90 and longitude -180..180")
+    hours = max(1, min(int(body.hours), 24))
+    payload = {"hourly": {"time": body.hourly.time,
+                          "shortwave_radiation": body.hourly.shortwave_radiation,
+                          "temperature_2m": body.hourly.temperature_2m},
+               "timezone": body.timezone, "utc_offset_seconds": body.utc_offset_seconds}
+    try:
+        weather_df = df_from_payload(payload, hours)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    meta = {"source": "browser", "timezone": body.timezone, "utc_offset_seconds": body.utc_offset_seconds,
+            "note": "Weather fetched by your browser because the server could not reach Open-Meteo."}
+    return _forecast_from_weather(weather_df, meta, hours, body.lat, body.lon)
 
 
 @app.get("/weather/diagnose")

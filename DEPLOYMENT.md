@@ -38,7 +38,47 @@ Then open http://localhost:8000. The same image runs on Google Cloud Run, Azure 
 If the dashboard is hosted on a different address than the API (for example GitHub Pages), open it with the API
 address in the URL: `https://your-dashboard-page/?api=https://your-api-address`
 
+## If the live weather says "429 Too Many Requests"
+
+Open-Meteo limits free use per outgoing address, and a free Render server shares its address with many other apps.
+The app now (1) keeps each place's forecast for 20 minutes instead of asking on every 30-second refresh, (2) never retries
+a 429 and waits before asking again, and (3) when the server cannot get the weather, the **viewer's browser fetches it itself**
+and sends it to `POST /forecast/live-weather/from-browser`, so the Satellite Weather tab keeps working. The tab tells you which
+route was used. `WEATHER_CACHE_MINUTES` (default 20) changes the cache time.
+
+## Security (login)
+
+With the login on, the dashboard shows a sign-in box and every API endpoint answers **401 Unauthorized** to anyone
+without a valid token. Only `/health` (needed by Render), `/auth/status`, `/auth/login` and the dashboard page itself stay public.
+HTTPS is provided by Render automatically; the API also sends HSTS and other browser-safety headers over HTTPS.
+
+**Turn it on in Render:** your service -> **Environment** -> **Add Environment Variable**:
+
+| Key | Value |
+|---|---|
+| `AUTH_PASSWORD` | a long passphrase (10+ characters). This switches the login on. |
+| `AUTH_SECRET` | a long random string. Create one with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `AUTH_USERNAME` | optional, default is `admin` |
+| `AUTH_TOKEN_HOURS` | optional, how long a sign-in lasts, default 8 |
+
+Click **Save Changes**; Render redeploys. Without `AUTH_PASSWORD` the API stays open (handy on your laptop, wrong for a public server).
+
+**Try it on your laptop first** (PowerShell, in the project folder):
+```
+$env:AUTH_PASSWORD = "choose-a-long-passphrase"
+$env:AUTH_SECRET = "paste-a-long-random-string"
+cd src
+uvicorn api:app --reload --port 8000
+```
+Open http://localhost:8000: you get the sign-in box. To go back to open mode, close that terminal and open a new one.
+
+**Show it to a reviewer:** open `/docs`, run `GET /forecast` -> **401**. Run `POST /auth/login` with the username and password,
+copy `access_token`, click **Authorize**, paste it, and `GET /forecast` now returns data.
+
+**Limits (say them honestly):** one shared account, no user database or roles; a token cannot be cancelled before it expires
+(Sign out only forgets it in the browser); the password is an environment variable, not a hashed database entry.
+
 ## Known limits of this deployment (be honest about them in a review)
 - The data is the fixed Kaggle file and the sensor feed is a simulator - deploying does not make them real-time hardware data.
-- The API has **no login yet**: anyone with the link can read it. Authentication is the next planned step.
+- Login is only active once `AUTH_PASSWORD` is set (see Security above).
 - The free tier has 512 MB RAM; this app uses well under that, but a very large dataset would not fit.

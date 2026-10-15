@@ -37,6 +37,7 @@ import os
 import socket
 import ssl
 import sys
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -78,13 +79,34 @@ def _ssl_context():
         return ssl.create_default_context()
 
 
+class UpstreamRateLimited(RuntimeError):
+    """Open-Meteo answered 429 Too Many Requests. Asking again straight away
+    only makes it worse, so callers wait `retry_after` seconds."""
+    def __init__(self, message, retry_after=300):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 def _http_get_json(url: str, timeout: float = 10.0, retries: int = 1):
     last_err = None
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(url, timeout=timeout, context=_ssl_context()) as resp:
                 return json.loads(resp.read().decode())
-        except Exception as e:  # keep the REAL error - it is what you need to debug
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                try:
+                    wait = int(e.headers.get("Retry-After", ""))
+                except (TypeError, ValueError):
+                    wait = 300
+                raise UpstreamRateLimited("HTTPError: HTTP Error 429: Too Many Requests",
+                                          max(60, min(wait, 3600)))
+            last_err = e
+            if e.code < 500:       # a client error will not fix itself on retry
+                break
+            if attempt < retries:
+                time.sleep(1.0 * (attempt + 1))
+        except Exception as e:     # keep the REAL error - it is what you need to debug
             last_err = e
             if attempt < retries:
                 time.sleep(1.0 * (attempt + 1))
@@ -126,13 +148,21 @@ def _payload_to_df(data: dict, hours: int) -> pd.DataFrame:
         times = data["hourly"]["time"]
         radiation = data["hourly"]["shortwave_radiation"]
         temperature = data["hourly"]["temperature_2m"]
-    except KeyError as e:
+    except (KeyError, TypeError) as e:
         raise RuntimeError(f"Weather API response missing expected field: {e}")
-    df = pd.DataFrame({
-        "DATE_TIME": pd.to_datetime(times),
-        "IRRADIATION_W_M2": radiation,
-        "AMBIENT_TEMPERATURE": temperature,
-    })
+    if not (len(times) == len(radiation) == len(temperature)) or len(times) == 0:
+        raise RuntimeError("Weather data arrays are empty or have different lengths")
+    try:
+        df = pd.DataFrame({
+            "DATE_TIME": pd.to_datetime(times),
+            "IRRADIATION_W_M2": pd.to_numeric(pd.Series(radiation), errors="coerce"),
+            "AMBIENT_TEMPERATURE": pd.to_numeric(pd.Series(temperature), errors="coerce"),
+        })
+    except (ValueError, TypeError) as e:
+        raise RuntimeError(f"Could not read the weather data: {e}")
+    # gaps (null values) must not break the model: no sun, and temperature carried over
+    df["IRRADIATION_W_M2"] = df["IRRADIATION_W_M2"].fillna(0.0).clip(lower=0.0)
+    df["AMBIENT_TEMPERATURE"] = df["AMBIENT_TEMPERATURE"].interpolate().bfill().ffill().fillna(25.0)
     # Open-Meteo returns times in the LOCATION's local time (timezone=auto).
     # Compare them with "now" in that same zone - using this computer's clock
     # would pick the wrong hours for any location outside its own timezone.
@@ -148,37 +178,90 @@ def _payload_to_df(data: dict, hours: int) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def df_from_payload(data: dict, hours: int) -> pd.DataFrame:
+    """Used for weather fetched by the viewer's own browser (see api.py)."""
+    if len(data.get("hourly", {}).get("time", [])) > 400:
+        raise RuntimeError("Too many hourly values (limit 400)")
+    return _payload_to_df(data, hours)
+
+
+# Forecasts only change about hourly, so there is no point asking Open-Meteo on every
+# dashboard refresh (every 30 s). Asking too often is what produced HTTP 429, because
+# a free cloud server shares its outgoing address with many other apps.
+CACHE_MINUTES = float(os.environ.get("WEATHER_CACHE_MINUTES", "20"))
+_mem = {}                  # location key -> {"t": epoch seconds, "payload": Open-Meteo JSON}
+_blocked_until = 0.0       # no calls to Open-Meteo before this time (after a 429)
+_lock = threading.Lock()
+
+
+def _meta(source, fetched_epoch, payload, **extra):
+    meta = {"source": source,
+            "fetched_at": datetime.fromtimestamp(fetched_epoch).isoformat(timespec="seconds"),
+            "age_minutes": int(max(0, time.time() - fetched_epoch) // 60),
+            "timezone": payload.get("timezone"),
+            "utc_offset_seconds": payload.get("utc_offset_seconds")}
+    meta.update(extra)
+    return meta
+
+
 def fetch_live_weather_with_meta(lat: float = DEFAULT_LAT, lon: float = DEFAULT_LON, hours: int = 24):
     """
-    Returns (DataFrame, meta). Tries the live Open-Meteo API first; if the
-    network call fails but an earlier successful response is cached on disk,
-    falls back to that and says so in `meta` instead of failing silently.
-    Raises RuntimeError (with the underlying cause) if neither works.
+    Returns (DataFrame, meta). Order of attempts:
+      1. a copy fetched less than CACHE_MINUTES ago (still live data),
+      2. a fresh request to Open-Meteo (skipped during a rate-limit cool-down),
+      3. the last saved forecast of any age, clearly labelled 'cache'.
+    Raises RuntimeError with the underlying cause if none of them works.
     """
-    params = (
-        f"latitude={lat}&longitude={lon}"
-        f"&hourly=shortwave_radiation,temperature_2m"
-        f"&forecast_days=2&timezone=auto"
-    )
-    url = f"{OPEN_METEO_URL}?{params}"
-    try:
-        data = _http_get_json(url)
-        df = _payload_to_df(data, hours)
-        _save_cache(lat, lon, data)
-        return df, {"source": "live", "fetched_at": datetime.now().isoformat(timespec="seconds"),
-                    "timezone": data.get("timezone"), "utc_offset_seconds": data.get("utc_offset_seconds")}
-    except RuntimeError as live_err:
-        cached = _load_cache(lat, lon)
-        if cached:
-            try:
-                df = _payload_to_df(cached["payload"], hours)
-                return df, {"source": "cache", "fetched_at": cached["fetched_at"],
-                            "timezone": cached["payload"].get("timezone"),
-                            "utc_offset_seconds": cached["payload"].get("utc_offset_seconds"),
-                            "warning": f"Live request failed ({live_err}); showing last saved forecast."}
-            except RuntimeError:
-                pass
-        raise RuntimeError(f"Could not get weather from Open-Meteo - {live_err}")
+    global _blocked_until
+    key = _cache_key(lat, lon)
+    now = time.time()
+
+    with _lock:
+        entry = _mem.get(key)
+    if entry and now - entry["t"] < CACHE_MINUTES * 60:
+        try:
+            return _payload_to_df(entry["payload"], hours), _meta("live", entry["t"], entry["payload"])
+        except RuntimeError:
+            pass                      # saved forecast has run out of upcoming hours: refresh it
+
+    live_err = None
+    if now < _blocked_until:
+        live_err = (f"HTTPError: HTTP Error 429: Too Many Requests (not asking Open-Meteo again "
+                    f"for another {int(_blocked_until - now)} s)")
+    else:
+        url = (f"{OPEN_METEO_URL}?latitude={lat}&longitude={lon}"
+               f"&hourly=shortwave_radiation,temperature_2m&forecast_days=2&timezone=auto")
+        try:
+            data = _http_get_json(url)
+            df = _payload_to_df(data, hours)
+            with _lock:
+                _mem[key] = {"t": now, "payload": data}
+            _save_cache(lat, lon, data)
+            return df, _meta("live", now, data)
+        except UpstreamRateLimited as e:
+            _blocked_until = now + e.retry_after
+            live_err = str(e)
+        except RuntimeError as e:
+            live_err = str(e)
+
+    # live attempt failed: fall back to the newest saved forecast, memory first
+    candidates = []
+    if entry:
+        candidates.append((entry["t"], entry["payload"]))
+    disk = _load_cache(lat, lon)
+    if disk:
+        try:
+            candidates.append((datetime.fromisoformat(disk["fetched_at"]).timestamp(), disk["payload"]))
+        except (KeyError, ValueError):
+            pass
+    for t, payload in sorted(candidates, key=lambda c: c[0], reverse=True):
+        try:
+            df = _payload_to_df(payload, hours)
+            return df, _meta("cache", t, payload,
+                             warning=f"Live request failed ({live_err}); showing the last saved forecast.")
+        except RuntimeError:
+            continue
+    raise RuntimeError(f"Could not get weather from Open-Meteo - {live_err}")
 
 
 def fetch_live_weather(lat: float = DEFAULT_LAT, lon: float = DEFAULT_LON, hours: int = 24):
